@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerência — VETRA Distribuidora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    :root {
+      --green:#0E3B3E; --green-mid:#1B5E5E; --green-light:#4FA89C;
+      --green-pale:#E5F2F0; --green-accent:#4FA89C;
+      --orange:#E8630A; --orange-light:#FFF3EA;
+      --charcoal:#0E1F1F; --gray-dark:#3D4544; --gray-mid:#7A8786;
+      --gray-light:#C8D2D1; --gray-pale:#F4F7F6; --white:#FFFFFF;
+      --sidebar-w:260px; --radius:12px; --radius-sm:8px;
+      --shadow:0 2px 12px rgba(0,0,0,0.06);
+      --shadow-hover:0 4px 24px rgba(14,59,62,0.12);
+      --bg-body: var(--gray-pale);
+      --bg-card: var(--white);
+      --text-main: var(--charcoal);
+      --text-on-color: #FFFFFF;
+      --border-col: var(--gray-light);
+      --chart-grid: rgba(14,59,62,0.08);
+      --chart-text: #3D4544;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',sans-serif; background:var(--bg-body); color:var(--text-main); display:flex; min-height:100vh; }
+
+    #login-screen { position:fixed; inset:0; background:linear-gradient(135deg,#0a1f1f 0%,#0E3B3E 60%,#0a1715 100%); display:flex; align-items:center; justify-content:center; z-index:1000; }
+    #login-screen.hidden { display:none; }
+    .login-box { background:var(--bg-card); border-radius:20px; padding:2.5rem; width:100%; max-width:400px; box-shadow:0 30px 80px rgba(0,0,0,0.4); }
+    .login-logo { display:flex; align-items:center; gap:12px; margin-bottom:2rem; justify-content:center; }
+    .login-logo-icon { width:48px; height:48px; background:var(--green); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; }
+    .login-logo-txt { font-family:'Sora',sans-serif; font-weight:800; font-size:20px; color:var(--green); }
+    .login-logo-txt span { color:var(--orange); }
+    .login-title { font-family:'Sora',sans-serif; font-size:1.3rem; font-weight:800; text-align:center; margin-bottom:.3rem; }
+    .login-sub { font-size:13px; color:var(--gray-mid); text-align:center; margin-bottom:1.75rem; }
+    .form-group { margin-bottom:1rem; }
+    .form-label { font-size:13px; font-weight:600; color:var(--gray-dark); margin-bottom:6px; display:block; }
+    .form-input { width:100%; padding:11px 16px; border:1.5px solid var(--border-col); border-radius:var(--radius-sm); font-family:'DM Sans',sans-serif; font-size:14px; background:var(--bg-card); color:var(--text-main); outline:none; transition:border .2s; }
+    .form-input:focus { border-color:var(--green); }
+    .form-select { width:100%; padding:11px 16px; border:1.5px solid var(--border-col); border-radius:var(--radius-sm); font-family:'DM Sans',sans-serif; font-size:14px; background:var(--bg-card); color:var(--text-main); outline:none; }
+    .btn { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500; cursor:pointer; border:none; transition:all .2s; }
+    .btn-primary { background:var(--green); color:var(--white); }
+    .btn-primary:hover { background:var(--green-mid); }
+    .btn-sm { padding:7px 14px; font-size:13px; }
+    .btn-outline { background:none; border:1.5px solid var(--gray-light); color:var(--gray-dark); }
+    .btn-outline:hover { border-color:var(--green); color:var(--green); background:var(--green-pale); }
+    .btn-orange { background:var(--orange); color:white; }
+    .btn-orange:hover { background:#d4580a; }
+    .btn-danger { background:#fff5f5; color:#c53030; border:1.5px solid #fed7d7; }
+    .btn-danger:hover { background:#fed7d7; }
+    .login-err { background:#fff5f5; border:1.5px solid #feb2b2; border-radius:var(--radius-sm); padding:10px 14px; font-size:13px; color:#c53030; margin-bottom:1rem; display:none; }
+    .login-err.show { display:block; }
+
+    .sidebar { width:var(--sidebar-w); background:#0E1F1F; min-height:100vh; position:fixed; left:0; top:0; display:flex; flex-direction:column; z-index:50; }
+    .sidebar-logo { padding:22px 20px 18px; border-bottom:1px solid rgba(255,255,255,0.08); }
+    .logo-mark { display:flex; align-items:center; gap:10px; }
+    .logo-icon { width:36px; height:36px; background:var(--green); border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:17px; }
+    .logo-txt { font-family:'Sora',sans-serif; font-weight:800; font-size:15px; color:var(--white); }
+    .logo-txt span { color:var(--green-accent); }
+    .logo-sub { font-size:10px; color:rgba(255,255,255,0.35); margin-top:2px; }
+    .sidebar-nav { flex:1; padding:1.25rem 10px; overflow-y:auto; }
+    .nav-section { margin-bottom:1.25rem; }
+    .nav-label { font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,0.3); padding:0 8px; margin-bottom:.6rem; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:9px; cursor:pointer; transition:all .2s; text-decoration:none; color:rgba(255,255,255,0.55); font-size:14px; font-weight:500; margin-bottom:2px; }
+    .nav-item:hover { background:rgba(255,255,255,0.07); color:var(--white); }
+    .nav-item.active { background:var(--green); color:var(--white); }
+    .nav-item .icon { font-size:15px; flex-shrink:0; }
+    .nav-badge { margin-left:auto; background:var(--orange); color:var(--white); border-radius:20px; font-size:11px; font-weight:700; padding:2px 8px; }
+    .sidebar-user { padding:14px 18px; border-top:1px solid rgba(255,255,255,0.08); display:flex; align-items:center; gap:10px; }
+    .user-av { width:34px; height:34px; background:var(--green); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:var(--white); flex-shrink:0; }
+    .user-name { font-size:13px; font-weight:600; color:var(--white); }
+    .user-role { font-size:11px; color:rgba(255,255,255,0.35); }
+    .logout-btn { margin-left:auto; background:none; border:none; cursor:pointer; color:rgba(255,255,255,0.3); font-size:16px; }
+    .logout-btn:hover { color:var(--white); }
+
+    .main { margin-left:var(--sidebar-w); flex:1; display:flex; flex-direction:column; }
+    .topbar { background:var(--bg-card); border-bottom:1px solid var(--border-col); padding:0 1.75rem; height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:40; }
+    .topbar-title { font-family:'Sora',sans-serif; font-size:1rem; font-weight:700; }
+    .topbar-right { display:flex; gap:10px; align-items:center; }
+    .search-box { display:flex; align-items:center; gap:8px; background:var(--gray-pale); border:1px solid var(--gray-light); border-radius:8px; padding:6px 12px; }
+    .search-box input { border:none; background:none; font-family:'DM Sans'; font-size:13px; color:var(--charcoal); outline:none; width:180px; }
+    .content { padding:1.75rem; }
+
+    .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.75rem; }
+    .kpi-card { background:var(--bg-card); border-radius:var(--radius); padding:1.4rem; box-shadow:var(--shadow); }
+    .kpi-icon { font-size:1.4rem; margin-bottom:.6rem; }
+    .kpi-num { font-family:'Sora',sans-serif; font-size:2rem; font-weight:800; }
+    .kpi-label { font-size:13px; color:var(--gray-mid); margin-top:2px; }
+    .kpi-trend { font-size:12px; color:var(--green-mid); font-weight:600; margin-top:4px; }
+
+    .card { background:var(--bg-card); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; margin-bottom:1.5rem; }
+    .card-header { padding:1.1rem 1.5rem; border-bottom:1px solid var(--gray-light); display:flex; align-items:center; justify-content:space-between; }
+    .card-title { font-family:'Sora',sans-serif; font-size:.95rem; font-weight:700; }
+    .card-sub { font-size:12px; color:var(--gray-mid); margin-top:2px; }
+    .card-body-pad { padding:1.25rem 1.5rem; }
+
+    table { width:100%; border-collapse:collapse; }
+    thead { background:var(--gray-pale); }
+    th { padding:10px 14px; text-align:left; font-size:11px; font-weight:700; color:var(--gray-mid); letter-spacing:.05em; text-transform:uppercase; white-space:nowrap; }
+    td { padding:13px 14px; font-size:13px; border-bottom:1px solid var(--border-col); vertical-align:middle; color:var(--text-main); }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:rgba(27,94,59,0.02); }
+    .td-main { font-weight:600; }
+    .td-sub { font-size:12px; color:var(--gray-mid); margin-top:2px; }
+
+    .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+    .badge-green { background:var(--green-pale); color:var(--green-mid); }
+    .badge-orange { background:var(--orange-light); color:var(--orange); }
+    .badge-gray { background:var(--gray-pale); color:var(--gray-mid); border:1px solid var(--border-col); }
+    .badge-blue { background:#EBF5FF; color:#1A6BBD; }
+    .badge-purple { background:#F3E8FF; color:#6B21A8; }
+
+    .presc-card { background:var(--bg-card); border-radius:var(--radius); box-shadow:var(--shadow); padding:1.1rem 1.4rem; margin-bottom:.85rem; display:flex; align-items:flex-start; gap:1.25rem; border-left:3px solid transparent; }
+    .presc-card.pendente { border-left-color:var(--orange); }
+    .presc-card.analisado { border-left-color:var(--green); }
+    .presc-card.admin { border-left-color:#6B21A8; }
+    .presc-avatar { width:40px; height:40px; background:var(--green-pale); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+    .presc-main { flex:1; }
+    .presc-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; }
+    .presc-from { font-weight:700; font-size:14px; }
+    .presc-meds { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0; }
+    .med-pill { background:var(--gray-pale); border:1px solid var(--gray-light); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:500; }
+    .presc-time { font-size:11px; color:var(--gray-mid); }
+    .presc-tel { font-size:12px; color:var(--green-mid); font-weight:500; }
+    .presc-actions { display:flex; gap:7px; align-items:center; flex-shrink:0; flex-wrap:wrap; }
+
+    .modal-overlay { position:fixed; inset:0; background:rgba(26,30,28,0.75); z-index:200; display:none; align-items:center; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--bg-card); border-radius:16px; padding:1.75rem; width:100%; max-width:540px; max-height:90vh; overflow-y:auto; position:relative; }
+    .modal-close { position:absolute; top:12px; right:12px; background:var(--gray-pale); border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; color:var(--gray-mid); }
+    .modal-title { font-family:'Sora',sans-serif; font-size:1.1rem; font-weight:700; margin-bottom:1.25rem; }
+    .foto-preview { width:100%; border-radius:10px; max-height:360px; object-fit:contain; background:var(--gray-pale); }
+    .of-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+    .filter-bar { display:flex; gap:8px; margin-bottom:1.25rem; flex-wrap:wrap; align-items:center; }
+    .filter-pill { padding:6px 14px; border-radius:20px; border:1.5px solid var(--gray-light); font-size:13px; font-weight:500; cursor:pointer; background:none; font-family:'DM Sans'; color:var(--gray-dark); transition:all .2s; }
+    .filter-pill.active { background:var(--green); border-color:var(--green); color:var(--white); }
+    .filter-pill:hover:not(.active) { border-color:var(--green); color:var(--green); }
+
+    .empty { text-align:center; padding:3rem 1rem; color:var(--gray-mid); }
+    .empty-icon { font-size:3rem; margin-bottom:1rem; }
+    .empty-title { font-family:'Sora',sans-serif; font-size:1.1rem; font-weight:700; color:var(--gray-dark); margin-bottom:.5rem; }
+
+    .toast { position:fixed; bottom:24px; right:24px; background:var(--green); color:var(--white); padding:13px 20px; border-radius:12px; font-size:14px; font-weight:500; box-shadow:0 8px 24px rgba(27,94,59,0.3); z-index:500; transform:translateY(80px); opacity:0; transition:all .4s cubic-bezier(.34,1.56,.64,1); }
+    .toast.show { transform:translateY(0); opacity:1; }
+
+    .panel { display:none; }
+    .panel.active { display:block; }
+
+    .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-radius:50%; border-top-color:white; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .ranking-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border-col); }
+    .ranking-row-link { cursor:pointer; border-radius:8px; padding:10px 8px; margin:0 -8px; transition:background .15s; }
+    .ranking-row-link:hover { background:var(--green-pale); }
+    .ranking-row-link:hover .ranking-name { color:var(--green-mid); text-decoration:underline; }
+    .ranking-row-link:hover .ranking-bar { filter:brightness(1.15); }
+    .ranking-row:last-child { border-bottom:none; }
+    .ranking-pos { width:28px; height:28px; border-radius:50%; background:var(--green-pale); color:var(--green); font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .ranking-name { flex:1; font-size:14px; font-weight:600; }
+    .ranking-sub { font-size:12px; color:var(--gray-mid); }
+    .ranking-bar-wrap { flex:1; height:8px; background:var(--gray-pale); border-radius:10px; overflow:hidden; margin:0 12px; }
+    .ranking-bar { height:100%; background:var(--green); border-radius:10px; }
+    .ranking-val { font-weight:700; font-size:14px; min-width:32px; text-align:right; }
+
+    .dash-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
+
+    @media(max-width:900px) {
+      .sidebar { transform:translateX(-100%); }
+      .main { margin-left:0; }
+      .kpi-grid { grid-template-columns:1fr 1fr; }
+      .dash-grid-2 { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <svg width="44" height="44" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 25 L50 70 L52 70 L38 25 Z" fill="#4FA89C"/>
+        <path d="M70 20 L52 70 L62 70 L80 20 Z" fill="#0E3B3E"/>
+      </svg>
+      <div><div class="login-logo-txt">VETRA <span>DISTRIBUIDORA</span></div><div style="font-size:11px;color:var(--gray-mid)">Painel de Gerência</div></div>
+    </div>
+    <div class="login-title">Acesso restrito</div>
+    <div class="login-sub">Entre com suas credenciais de administrador</div>
+    <div class="login-err" id="login-err">E-mail ou senha incorretos.</div>
+    <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="adm-email" placeholder="vetra@vetradistribuidora.com.br" /></div>
+    <div class="form-group"><label class="form-label">Senha</label><input class="form-input" type="password" id="adm-senha" placeholder="••••••••" onkeydown="if(event.key==='Enter')admLogin()" /></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;margin-top:.25rem" onclick="admLogin()" id="adm-btn">Entrar</button>
+  </div>
+</div>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 25 L50 70 L52 70 L38 25 Z" fill="#4FA89C"/>
+        <path d="M70 20 L52 70 L62 70 L80 20 Z" fill="#EAF2F1"/>
+      </svg>
+      <div><div class="logo-txt">VETRA <span>DISTRIBUIDORA</span></div><div class="logo-sub">Gerência · Admin</div></div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-label">Principal</div>
+      <a class="nav-item active" href="#" onclick="showPanel('dashboard',this)"><span class="icon">📊</span> Dashboard</a>
+      <a class="nav-item" href="#" onclick="showPanel('prescricoes',this)"><span class="icon">📋</span> Prescrições<span class="nav-badge" id="badge-presc">0</span></a>
+      <a class="nav-item" href="#" onclick="showPanel('analise',this)"><span class="icon">📈</span> Análise Detalhada</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Cadastros</div>
+      <a class="nav-item" href="#" onclick="showPanel('veterinarios',this)"><span class="icon">🩺</span> Veterinários</a>
+      <a class="nav-item" href="#" onclick="showPanel('locais',this)"><span class="icon">🏪</span> Petshops</a>
+      <a class="nav-item" href="#" onclick="showPanel('medicamentos',this)"><span class="icon">💊</span> Medicamentos</a>
+      <a class="nav-item" href="#" onclick="showPanel('bairros',this)"><span class="icon">🗺️</span> Bairros</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Config</div>
+      <a class="nav-item" href="/" target="_blank"><span class="icon">🌐</span> Ver site público</a>
+    </div>
+  </nav>
+  <div class="sidebar-user">
+    <div class="user-av" id="user-av">AD</div>
+    <div><div class="user-name" id="user-name">Admin</div><div class="user-role">Gerência VETRA</div></div>
+    <button class="logout-btn" onclick="admLogout()" title="Sair">⏻</button>
+  </div>
+</aside>
+
+<div class="main" id="main-app" style="display:none">
+  <header class="topbar">
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <div class="topbar-right">
+      <div class="search-box"><span style="font-size:14px;color:var(--gray-mid)">🔍</span><input type="text" placeholder="Buscar..." id="search-input" oninput="handleSearch(this.value)" /></div>
+      <button class="btn btn-primary btn-sm" onclick="openPrescManual()">+ Registrar Prescrição</button>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div class="panel active" id="panel-dashboard">
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-num" id="kpi-total" style="color:var(--green)">—</div><div class="kpi-label">Total de prescrições</div><div class="kpi-trend" id="kpi-mes">—</div></div>
+        <div class="kpi-card"><div class="kpi-icon">⏳</div><div class="kpi-num" id="kpi-pendentes" style="color:var(--orange)">—</div><div class="kpi-label">Pendentes de análise</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🩺</div><div class="kpi-num" id="kpi-vets" style="color:var(--green)">—</div><div class="kpi-label">Veterinários cadastrados</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🏪</div><div class="kpi-num" id="kpi-locais" style="color:var(--green)">—</div><div class="kpi-label">Petshops cadastrados</div></div>
+      </div>
+
+      <div class="dash-grid-2">
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">🗺️ Top bairros que mais prescrevem</div><div class="card-sub">Ranking por volume de prescrições</div></div></div>
+          <div class="card-body-pad" id="rank-bairros"><div class="empty"><div class="empty-icon">📊</div>Carregando...</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">💊 Medicamentos mais prescritos</div><div class="card-sub">Ranking por volume de prescrições</div></div></div>
+          <div class="card-body-pad" id="rank-medicamentos"><div class="empty"><div class="empty-icon">📊</div>Carregando...</div></div>
+        </div>
+      </div>
+
+      <div class="dash-grid-2">
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">🏪 Petshops que mais prescrevem</div><div class="card-sub">Ranking por volume de prescrições</div></div></div>
+          <div class="card-body-pad" id="rank-petshops"><div class="empty"><div class="empty-icon">📊</div>Carregando...</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">🩺 Veterinários que mais prescrevem</div><div class="card-sub">Ranking por volume de prescrições</div></div></div>
+          <div class="card-body-pad" id="rank-veterinarios"><div class="empty"><div class="empty-icon">📊</div>Carregando...</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Prescrições recentes</div><div class="card-sub">Últimas recebidas</div></div>
+          <button class="btn btn-outline btn-sm" onclick="showPanel('prescricoes', document.querySelector('[onclick*=\"prescricoes\"]'))">Ver todas →</button>
+        </div>
+        <div id="dash-presc" style="padding:.5rem 0"></div>
+      </div>
+    </div>
+
+    <!-- ══ PRESCRIÇÕES ══ -->
+    <div class="panel" id="panel-prescricoes">
+      <div class="filter-bar">
+        <button class="filter-pill active" onclick="filterStatus('',this)">Todas</button>
+        <button class="filter-pill" onclick="filterStatus('pendente',this)">Pendentes</button>
+        <button class="filter-pill" onclick="filterStatus('analisado',this)">Analisadas</button>
+        <select class="form-select" style="width:auto;padding:6px 12px;font-size:13px" onchange="filterBairro(this.value)" id="bairro-filter">
+          <option value="">Todos os bairros</option>
+        </select>
+      </div>
+      <div id="presc-list"></div>
+    </div>
+
+    <!-- ══ ANÁLISE DETALHADA ══ -->
+    <div class="panel" id="panel-analise">
+      <div class="card">
+        <div class="card-header"><div class="card-title">📈 Prescrições por bairro</div></div>
+        <div class="card-body-pad"><div style="position:relative;height:340px"><canvas id="chart-bairros" role="img" aria-label="Gráfico de barras de prescrições por bairro">Gráfico de prescrições por bairro</canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">📈 Medicamentos mais prescritos</div></div>
+        <div class="card-body-pad"><div style="position:relative;height:340px"><canvas id="chart-medicamentos" role="img" aria-label="Gráfico de barras de medicamentos mais prescritos">Gráfico de medicamentos mais prescritos</canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">📈 Petshops com mais prescrições</div></div>
+        <div class="card-body-pad"><div style="position:relative;height:340px"><canvas id="chart-petshops" role="img" aria-label="Gráfico de barras de petshops com mais prescrições">Gráfico de petshops</canvas></div></div>
+      </div>
+    </div>
+
+    <!-- ══ VETERINÁRIOS ══ -->
+    <div class="panel" id="panel-veterinarios">
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Veterinários Cadastrados</div><div class="card-sub">Médicos registrados na plataforma</div></div>
+          <button class="btn btn-primary btn-sm" onclick="openVetModal()">+ Novo Veterinário</button>
+        </div>
+        <div><table>
+          <thead><tr><th>Veterinário</th><th>CRMV-MA</th><th>Especialidade</th><th>Bairro</th><th>Petshop</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="vet-tbody"><tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando...</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- ══ PETSHOPS ══ -->
+    <div class="panel" id="panel-locais">
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Petshops & Clínicas</div><div class="card-sub">Estabelecimentos cadastrados por bairro</div></div>
+          <button class="btn btn-primary btn-sm" onclick="openLocalModal()">+ Novo Petshop</button>
+        </div>
+        <div><table>
+          <thead><tr><th>Estabelecimento</th><th>Telefone</th><th>Endereço</th><th>Bairro</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="local-tbody"><tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando...</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- ══ MEDICAMENTOS ══ -->
+    <div class="panel" id="panel-medicamentos">
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Catálogo de Medicamentos</div><div class="card-sub">Produtos disponíveis no formulário de prescrição</div></div>
+          <button class="btn btn-primary btn-sm" onclick="openMedModal()">+ Novo Medicamento</button>
+        </div>
+        <div><table>
+          <thead><tr><th>Nome</th><th>Apresentação</th><th>Categoria</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="med-tbody"><tr><td colspan="5" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando...</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- ══ BAIRROS ══ -->
+    <div class="panel" id="panel-bairros">
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Bairros da Grande São Luís</div><div class="card-sub">Cobertura geográfica exibida no site público</div></div>
+          <button class="btn btn-primary btn-sm" onclick="openBairroModal()">+ Novo Bairro</button>
+        </div>
+        <div><table>
+          <thead><tr><th>Bairro</th><th>Prescrições</th><th>Ações</th></tr></thead>
+          <tbody id="bairro-tbody"><tr><td colspan="3" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando...</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════ MODAL FOTO ════════ -->
+<div class="modal-overlay" id="modal-foto">
+  <div class="modal" style="max-width:600px">
+    <button class="modal-close" onclick="closeFoto()">×</button>
+    <div class="modal-title">📷 Foto da Prescrição</div>
+    <img id="foto-img" class="foto-preview" src="" alt="Foto da prescrição" />
+    <p id="foto-loading" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando imagem...</p>
+    <button class="btn btn-primary" id="btn-analisar-ia" style="width:100%;justify-content:center;margin-top:1rem" onclick="analisarFotoComIA()">
+      🤖 Identificar medicamentos com IA
+    </button>
+    <p id="ia-status" style="font-size:13px;color:var(--gray-mid);text-align:center;margin-top:8px"></p>
+  </div>
+</div>
+
+<!-- ════════ MODAL DETALHES ════════ -->
+<div class="modal-overlay" id="modal-det">
+  <div class="modal"><button class="modal-close" onclick="document.getElementById('modal-det').classList.remove('open')">×</button>
+    <div class="modal-title">📋 Detalhes da Prescrição</div>
+    <div id="det-body"></div>
+  </div>
+</div>
+
+<!-- ════════ MODAL REGISTRAR PRESCRIÇÃO (admin) ════════ -->
+<div class="modal-overlay" id="modal-presc-manual">
+  <div class="modal">
+    <button class="modal-close" onclick="closePrescManual()">×</button>
+    <div class="modal-title">📋 Registrar Prescrição Manualmente</div>
+    <p style="font-size:13px;color:var(--gray-mid);margin-bottom:1.25rem">Use quando a prescrição chegar por telefone, WhatsApp ou presencialmente.</p>
+    <div class="form-group">
+      <label class="form-label">Petshop / Clínica *</label>
+      <select class="form-select" id="pm-local-select" onchange="onPmLocalChange()">
+        <option value="">Selecione um petshop cadastrado...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ou digite manualmente (se não cadastrado)</label>
+      <input class="form-input" type="text" id="pm-local-nome" placeholder="Nome do petshop" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Veterinário</label>
+      <select class="form-select" id="pm-vet-select">
+        <option value="">Selecione o petshop primeiro...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ou digite manualmente</label>
+      <input class="form-input" type="text" id="pm-vet-nome" placeholder="Nome do veterinário" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bairro *</label>
+      <select class="form-select" id="pm-bairro"><option value="">Selecione...</option></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Medicamentos *</label>
+      <div id="pm-meds-list"></div>
+      <button type="button" class="btn btn-outline btn-sm" style="width:100%;justify-content:center;margin-top:6px" onclick="addPmMed()">+ Adicionar medicamento</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observações</label>
+      <textarea class="form-input" id="pm-obs" rows="2" style="resize:vertical"></textarea>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;margin-top:.5rem" onclick="salvarPrescManual()">Salvar Prescrição</button>
+  </div>
+</div>
+
+<!-- ════════ MODAIS CRUD: PETSHOP / VET / MEDICAMENTO / BAIRRO ════════ -->
+<div class="modal-overlay" id="modal-local">
+  <div class="modal">
+    <button class="modal-close" onclick="closeLocalModal()">×</button>
+    <div class="modal-title" id="local-modal-title">🏪 Novo Petshop / Clínica</div>
+    <input type="hidden" id="loc-id" />
+    <div class="form-group"><label class="form-label">Nome do estabelecimento *</label><input class="form-input" type="text" id="loc-nome" placeholder="Ex: PetCenter São Luís" /></div>
+    <div class="of-grid">
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" type="text" id="loc-tel" placeholder="(98) 9 0000-0000" /></div>
+      <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" type="text" id="loc-cnpj" placeholder="00.000.000/0000-00" /></div>
+    </div>
+    <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="loc-email" placeholder="contato@petshop.com" /></div>
+    <div class="form-group"><label class="form-label">Endereço</label><input class="form-input" type="text" id="loc-endereco" placeholder="Rua, número, bairro" /></div>
+    <div class="form-group"><label class="form-label">Bairro *</label><select class="form-select" id="loc-bairro"><option value="">Selecione...</option></select></div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="loc-ativo" checked style="width:16px;height:16px" /><label class="form-label" style="margin:0" for="loc-ativo">Petshop ativo</label></div>
+    <div style="display:flex;gap:10px;margin-top:.5rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;padding:12px" onclick="salvarLocal()">Salvar</button>
+      <button class="btn btn-danger" id="loc-delete-btn" style="display:none;padding:12px 18px" onclick="excluirLocal()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-vet">
+  <div class="modal">
+    <button class="modal-close" onclick="closeVetModal()">×</button>
+    <div class="modal-title" id="vet-modal-title">🩺 Novo Veterinário</div>
+    <input type="hidden" id="vet-id" />
+    <div class="form-group"><label class="form-label">Nome completo *</label><input class="form-input" type="text" id="vet-nome" placeholder="Dr(a). Nome Sobrenome" /></div>
+    <div class="of-grid">
+      <div class="form-group"><label class="form-label">CRMV-MA *</label><input class="form-input" type="text" id="vet-crmv" placeholder="00000" /></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" type="text" id="vet-tel" placeholder="(98) 9 0000-0000" /></div>
+    </div>
+    <div class="form-group"><label class="form-label">E-mail *</label><input class="form-input" type="email" id="vet-email" placeholder="vet@email.com" /></div>
+    <div class="form-group"><label class="form-label">Especialidade</label><input class="form-input" type="text" id="vet-esp" placeholder="Ex: Clínica Geral, Dermatologia..." /></div>
+    <div class="of-grid">
+      <div class="form-group"><label class="form-label">Petshop / Clínica</label><select class="form-select" id="vet-local"><option value="">Sem vínculo</option></select></div>
+      <div class="form-group"><label class="form-label">Bairro *</label><select class="form-select" id="vet-bairro"><option value="">Selecione...</option></select></div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="vet-ativo" checked style="width:16px;height:16px" /><label class="form-label" style="margin:0" for="vet-ativo">Veterinário ativo</label></div>
+    <div style="display:flex;gap:10px;margin-top:.5rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;padding:12px" onclick="salvarVet()">Salvar</button>
+      <button class="btn btn-danger" id="vet-delete-btn" style="display:none;padding:12px 18px" onclick="excluirVet()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-med">
+  <div class="modal">
+    <button class="modal-close" onclick="closeMedModal()">×</button>
+    <div class="modal-title" id="med-modal-title">💊 Novo Medicamento</div>
+    <input type="hidden" id="med-id" />
+    <div class="form-group"><label class="form-label">Nome *</label><input class="form-input" type="text" id="med-nome" placeholder="Ex: Doxiciclina" /></div>
+    <div class="of-grid">
+      <div class="form-group"><label class="form-label">Apresentação</label><input class="form-input" type="text" id="med-apres" placeholder="Ex: 100mg, Frasco 30ml" /></div>
+      <div class="form-group"><label class="form-label">Categoria</label><input class="form-input" type="text" id="med-cat" placeholder="Ex: Antibiótico" /></div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="med-ativo" checked style="width:16px;height:16px" /><label class="form-label" style="margin:0" for="med-ativo">Disponível no formulário público</label></div>
+    <div style="display:flex;gap:10px;margin-top:.5rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;padding:12px" onclick="salvarMed()">Salvar</button>
+      <button class="btn btn-danger" id="med-delete-btn" style="display:none;padding:12px 18px" onclick="excluirMed()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-bairro">
+  <div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="closeBairroModal()">×</button>
+    <div class="modal-title" id="bairro-modal-title">🗺️ Novo Bairro</div>
+    <input type="hidden" id="bairro-id" />
+    <div class="form-group"><label class="form-label">Nome do bairro *</label><input class="form-input" type="text" id="bairro-nome" placeholder="Ex: Cohama" /></div>
+    <div style="display:flex;gap:10px;margin-top:.5rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;padding:12px" onclick="salvarBairro()">Salvar</button>
+      <button class="btn btn-danger" id="bairro-delete-btn" style="display:none;padding:12px 18px" onclick="excluirBairro()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL = 'https://xiwkosnranwsudjkdlli.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhpd2tvc25yYW53c3VkamtkbGxpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5Nzc0NTQsImV4cCI6MjA5NjU1MzQ1NH0.72dWtHQZfaluwvvecsL_D6jFBY-Ah_x7KPTObaNRMec';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+let allPrescricoes = [], allLocais = [], allVets = [], allBairros = [], allMedicamentos = [];
+let currentStatusFilter = '', currentBairroFilter = '';
+let chartBairros, chartMedicamentos, chartPetshops;
+let currentUser = null; // usuário admin logado — usado para registrar "analisado por"
+
+/* ════════════ AUTENTICAÇÃO ════════════ */
+async function admLogin() {
+  const email = document.getElementById('adm-email').value.trim();
+  const senha = document.getElementById('adm-senha').value;
+  if (!email || !senha) { showLoginErr('Preencha todos os campos.'); return; }
+  const btn = document.getElementById('adm-btn');
+  btn.innerHTML = '<span class="spinner"></span> Entrando...'; btn.disabled = true;
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) throw error;
+    hideLoginScreen();
+    initAdmin(data.user);
+  } catch(e) {
+    showLoginErr('E-mail ou senha incorretos.');
+    btn.textContent = 'Entrar'; btn.disabled = false;
+  }
+}
+function showLoginErr(msg) { const el = document.getElementById('login-err'); el.textContent = msg; el.classList.add('show'); }
+async function admLogout() { await sb.auth.signOut(); location.reload(); }
+function hideLoginScreen() { document.getElementById('login-screen').classList.add('hidden'); document.getElementById('main-app').style.display = 'flex'; }
+function initAdmin(user) {
+  currentUser = user;
+  document.getElementById('user-av').textContent = (user.email||'AD').substring(0,2).toUpperCase();
+  document.getElementById('user-name').textContent = user.email.split('@')[0];
+  loadAll();
+}
+
+/* ════════════ NAVEGAÇÃO ════════════ */
+const panelTitles = { dashboard:'Dashboard', prescricoes:'Prescrições', analise:'Análise Detalhada', veterinarios:'Veterinários', locais:'Petshops & Clínicas', medicamentos:'Catálogo de Medicamentos', bairros:'Bairros da Grande São Luís' };
+function showPanel(id, el) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('topbar-title').textContent = panelTitles[id] || id;
+  if (id === 'prescricoes') renderPresc();
+  if (id === 'analise') renderCharts();
+}
+
+/* ════════════ CARREGAMENTO GERAL ════════════ */
+async function loadAll() {
+  await loadBairros();
+  await loadMedicamentos();
+  await Promise.all([ loadPrescricoes(), loadVets(), loadLocais() ]);
+}
+
+/* ════════════ BAIRROS ════════════ */
+async function loadBairros() {
+  const { data } = await sb.from('bairros').select('*').order('nome');
+  allBairros = data || [];
+  const selects = ['loc-bairro','vet-bairro','pm-bairro'];
+  selects.forEach(id => {
+    const sel = document.getElementById(id);
+    const placeholder = sel.querySelector('option').outerHTML;
+    sel.innerHTML = placeholder + allBairros.map(b => `<option value="${b.id}">${b.nome}</option>`).join('');
+  });
+  const filtroSel = document.getElementById('bairro-filter');
+  filtroSel.innerHTML = '<option value="">Todos os bairros</option>' + allBairros.map(b => `<option>${b.nome}</option>`).join('');
+}
+
+function renderBairroTable() {
+  const tbody = document.getElementById('bairro-tbody');
+  if (!allBairros.length) { tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--gray-mid);padding:2rem">Nenhum bairro cadastrado.</td></tr>`; return; }
+  tbody.innerHTML = allBairros.map(b => {
+    const count = allPrescricoes.filter(p => p.bairro_id === b.id || p.bairro_nome === b.nome).length;
+    return `<tr><td class="td-main">📍 ${b.nome}</td><td><span class="badge badge-green">${count}</span></td><td><button class="btn btn-outline btn-sm" onclick='openBairroModal(${JSON.stringify(b).replace(/'/g,"&#39;")})'>Editar</button></td></tr>`;
+  }).join('');
+}
+
+function openBairroModal(bairro) {
+  document.getElementById('modal-bairro').classList.add('open');
+  document.getElementById('bairro-id').value = '';
+  document.getElementById('bairro-nome').value = '';
+  document.getElementById('bairro-delete-btn').style.display = 'none';
+  document.getElementById('bairro-modal-title').textContent = '🗺️ Novo Bairro';
+  if (bairro && bairro.id) {
+    document.getElementById('bairro-id').value = bairro.id;
+    document.getElementById('bairro-nome').value = bairro.nome;
+    document.getElementById('bairro-delete-btn').style.display = 'inline-flex';
+    document.getElementById('bairro-modal-title').textContent = '🗺️ Editar Bairro';
+  }
+}
+function closeBairroModal() { document.getElementById('modal-bairro').classList.remove('open'); }
+async function salvarBairro() {
+  const id = document.getElementById('bairro-id').value;
+  const nome = document.getElementById('bairro-nome').value.trim();
+  if (!nome) { showToast('Digite o nome do bairro.'); return; }
+  let error;
+  if (id) ({ error } = await sb.from('bairros').update({ nome }).eq('id', id));
+  else ({ error } = await sb.from('bairros').insert({ nome }));
+  if (error) { showToast('Erro: ' + error.message); return; }
+  closeBairroModal(); showToast(id ? '✅ Bairro atualizado!' : '✅ Bairro cadastrado!');
+  await loadBairros(); renderBairroTable();
+}
+async function excluirBairro() {
+  const id = document.getElementById('bairro-id').value;
+  if (!id || !confirm('Excluir este bairro?')) return;
+  const { error } = await sb.from('bairros').delete().eq('id', id);
+  if (error) { showToast('Erro: ' + error.message); return; }
+  closeBairroModal(); showToast('🗑️ Bairro excluído.');
+  await loadBairros(); renderBairroTable();
+}
+
+/* ════════════ MEDICAMENTOS (catálogo) ════════════ */
+async function loadMedicamentos() {
+  const { data } = await sb.from('medicamentos').select('*').order('nome');
+  allMedicamentos = data || [];
+  renderMedTable();
+}
+function renderMedTable() {
+  const tbody = document.getElementById('med-tbody');
+  if (!allMedicamentos.length) { tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--gray-mid);padding:2rem">Nenhum medicamento cadastrado.</td></tr>`; return; }
+  tbody.innerHTML = allMedicamentos.map(m => `
+    <tr>
+      <td class="td-main">${m.nome}</td>
+      <td>${m.apresentacao||'—'}</td>
+      <td><span class="badge badge-blue">${m.categoria||'—'}</span></td>
+      <td>${m.ativo ? '<span class="badge badge-green">Ativo</span>' : '<span class="badge badge-gray">Inativo</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick='openMedModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>Editar</button></td>
+    </tr>`).join('');
+}
+function openMedModal(med) {
+  document.getElementById('modal-med').classList.add('open');
+  document.getElementById('med-id').value = '';
+  document.getElementById('med-nome').value = '';
+  document.getElementById('med-apres').value = '';
+  document.getElementById('med-cat').value = '';
+  document.getElementById('med-ativo').checked = true;
+  document.getElementById('med-delete-btn').style.display = 'none';
+  document.getElementById('med-modal-title').textContent = '💊 Novo Medicamento';
+  if (med && med.id) {
+    document.getElementById('med-id').value = med.id;
+    document.getElementById('med-nome').value = med.nome;
+    document.getElementById('med-apres').value = med.apresentacao || '';
+    document.getElementById('med-cat').value = med.categoria || '';
+    document.getElementById('med-ativo').checked = !!med.ativo;
+    document.getElementById('med-delete-btn').style.display = 'inline-flex';
+    document.getElementById('med-modal-title').textContent = '💊 Editar Medicamento';
+  }
+}
+function closeMedModal() { document.getElementById('modal-med').classList.remove('open'); }
+async function salvarMed() {
+  const id = document.getElementById('med-id').value;
+  const nome = document.getElementById('med-nome').value.trim();
+  if (!nome) { showToast('Digite o nome do medicamento.'); return; }
+  const payload = { nome, apresentacao: document.getElementById('med-apres').value.trim(), categoria: document.getElementById('med-cat').value.trim(), ativo: document.getElementById('med-ativo').checked };
+  let error;
+  if (id) ({ error } = await sb.from('medicamentos').update(payload).eq('id', id));
+  else ({ error } = await sb.from('medicamentos').insert(payload));
+  if (error) { showToast('Erro: ' + error.message); return; }
+  closeMedModal(); showToast(id ? '✅ Medicamento atualizado!' : '✅ Medicamento cadastrado!');
+  await loadMedicamentos();
+}
+async function excluirMed() {
+  const id = document.getElementById('med-id').value;
+  if (!id || !confirm('Excluir este medicamento?')) return;
+  const { error } = await sb.from('medicamentos').delete().eq('id', id);
+  if (error) { showToast('Erro: ' + error.message); return; }
+  closeMedModal(); showToast('🗑️ Medicamento excluído.');
+  await loadMedicamentos();
+}
+
+/* ════════════ PRESCRIÇÕES ════════════ */
+async function loadPrescricoes() {
+  const { data, error } = await sb.from('prescricoes')
+    .select('*, prescricao_medicamentos(*, medicamentos(nome, apresentacao))')
+    .order('criado_em', { ascending: false });
+  if (error) { console.error(error); return; }
+  allPrescricoes = data || [];
+
+  /* Enriquece com o e-mail de quem analisou (via view, já que auth.users não é exposto diretamente) */
+  const idsAnalisados = [...new Set(allPrescricoes.map(p => p.id))];
+  if (idsAnalisados.length) {
+    const { data: comAnalista } = await sb.from('vw_prescricoes_com_analista').select('id, analisado_por_email').in('id', idsAnalisados);
+    if (comAnalista) {
+      const mapaEmail = {};
+      comAnalista.forEach(r => { mapaEmail[r.id] = r.analisado_por_email; });
+      allPrescricoes.forEach(p => { p.analisado_por_email = mapaEmail[p.id] || null; });
+    }
+  }
+
+  const pendentes = allPrescricoes.filter(p => p.status === 'pendente').length;
+  document.getElementById('badge-presc').textContent = pendentes;
+  document.getElementById('kpi-pendentes').textContent = pendentes;
+  document.getElementById('kpi-total').textContent = allPrescricoes.length;
+
+  const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0,0,0,0);
+  const esteMes = allPrescricoes.filter(p => new Date(p.criado_em) >= inicioMes).length;
+  document.getElementById('kpi-mes').textContent = `${esteMes} este mês`;
+
+  renderPresc();
+  renderDashPresc();
+  renderRankings();
+  renderBairroTable();
+}
+
+function medNome(pm) {
+  if (pm.medicamentos?.nome) return pm.medicamentos.nome + (pm.medicamentos.apresentacao ? ' — '+pm.medicamentos.apresentacao : '');
+  return pm.nome_livre || 'Medicamento não informado';
+}
+
+function renderPresc() {
+  let list = allPrescricoes;
+  if (currentStatusFilter) list = list.filter(p => p.status === currentStatusFilter);
+  if (currentBairroFilter) list = list.filter(p => p.bairro_nome === currentBairroFilter);
+  const container = document.getElementById('presc-list');
+  if (!list.length) { container.innerHTML = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Nenhuma prescrição encontrada</div></div>`; return; }
+  container.innerHTML = list.map(p => prescCard(p)).join('');
+}
+function renderDashPresc() {
+  const recentes = allPrescricoes.slice(0,4);
+  document.getElementById('dash-presc').innerHTML = recentes.length ? recentes.map(p => prescCard(p)).join('') : `<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Nenhuma prescrição ainda</div></div>`;
+}
+
+function prescCard(p) {
+  const meds = (p.prescricao_medicamentos || []);
+  const medPills = meds.map(m => `<span class="med-pill">${m.origem === 'ia' ? '🤖' : '💊'} ${medNome(m)}${m.dosagem?' — '+m.dosagem:''}</span>`).join('');
+  const statusBadge = { pendente:'<span class="badge badge-orange">Pendente</span>', analisado:'<span class="badge badge-green">Analisada</span>' }[p.status] || '<span class="badge badge-gray">—</span>';
+  const origemBadge = p.origem === 'admin' ? '<span class="badge badge-purple">Registrada pelo admin</span>' : '';
+  const fotoBtn = p.foto_url ? `<button class="btn btn-outline btn-sm" onclick="verFoto('${p.foto_url}', '${p.id}')">📷 Foto</button>` : '';
+  const tel = p.observacoes && p.observacoes.includes('Telefone:') ? `<div class="presc-tel">📞 ${p.observacoes.split('Telefone:')[1].trim()}</div>` : '';
+  const cardClass = p.origem === 'admin' ? 'admin' : p.status;
+  const analisadoPorTxt = (p.status === 'analisado' && p.analisado_por_email)
+    ? `<div style="font-size:11px;color:var(--green-mid);font-weight:600;margin-top:4px">✓ Analisado por: ${p.analisado_por_email.split('@')[0]} ${p.analisado_em ? '— '+formatDate(p.analisado_em) : ''}</div>`
+    : '';
+  return `
+    <div class="presc-card ${cardClass}">
+      <div class="presc-avatar">🩺</div>
+      <div class="presc-main">
+        <div class="presc-header">
+          <span class="presc-from">${p.local_nome || '—'}</span>
+          ${statusBadge} ${origemBadge}
+          <span class="badge badge-blue">📍 ${p.bairro_nome || '—'}</span>
+        </div>
+        <div style="font-size:12px;color:var(--gray-mid);margin-bottom:5px">${p.veterinario_nome || '—'}</div>
+        ${tel}
+        ${meds.length ? `<div class="presc-meds">${medPills}</div>` : '<div style="font-size:12px;color:var(--gray-mid);margin-bottom:5px">Nenhum medicamento listado (ver foto)</div>'}
+        <div class="presc-time">⏱ ${formatDate(p.criado_em)}</div>
+        ${analisadoPorTxt}
+      </div>
+      <div class="presc-actions">
+        ${fotoBtn}
+        <button class="btn btn-outline btn-sm" onclick="verDetalhes('${p.id}')">Ver</button>
+        ${p.status !== 'analisado' ? `<button class="btn btn-sm" style="background:var(--green-pale);color:var(--green);border:none" onclick="marcarAnalisado('${p.id}')">✓ Marcar como analisada</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function marcarAnalisado(id) {
+  const { error } = await sb.from('prescricoes').update({
+    status: 'analisado',
+    analisado_por: currentUser?.id || null,
+    analisado_em: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { showToast('Erro ao marcar: ' + error.message); return; }
+  showToast('✅ Marcado como analisado');
+  await loadPrescricoes();
+}
+function filterStatus(s, btn) { currentStatusFilter = s; document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active')); btn.classList.add('active'); renderPresc(); }
+function filterBairro(v) { currentBairroFilter = v; renderPresc(); }
+function handleSearch(q) {
+  if (!q) { renderPresc(); return; }
+  const ql = q.toLowerCase();
+  const filtered = allPrescricoes.filter(p => (p.local_nome||'').toLowerCase().includes(ql) || (p.veterinario_nome||'').toLowerCase().includes(ql) || (p.bairro_nome||'').toLowerCase().includes(ql));
+  document.getElementById('presc-list').innerHTML = filtered.map(p => prescCard(p)).join('');
+}
+
+const signedUrlCache = {};
+const IMG_CACHE_NAME = 'vetra-fotos-v1';
+let fotoModalContext = { prescricaoId: null, fotoUrl: null, signedUrl: null };
+
+async function verFoto(fotoUrl, prescricaoId) {
+  document.getElementById('modal-foto').classList.add('open');
+  document.getElementById('foto-loading').style.display = 'block';
+  document.getElementById('ia-status').textContent = '';
+  fotoModalContext = { prescricaoId, fotoUrl, signedUrl: null };
+
+  const cleanPath = fotoUrl.replace('prescricoes/','');
+
+  /* 1. Tenta servir do Cache Storage do navegador (zero egress no Supabase) */
+  if ('caches' in window) {
+    try {
+      const cache = await caches.open(IMG_CACHE_NAME);
+      const cachedResp = await cache.match(cleanPath);
+      if (cachedResp) {
+        const blob = await cachedResp.blob();
+        const objUrl = URL.createObjectURL(blob);
+        document.getElementById('foto-img').src = objUrl;
+        document.getElementById('foto-img').style.display = 'block';
+        document.getElementById('foto-loading').style.display = 'none';
+        fotoModalContext.signedUrl = objUrl;
+        return;
+      }
+    } catch(e) { /* segue para buscar normalmente */ }
+  }
+
+  /* 2. Reusa URL assinada em memória, se ainda válida */
+  const cached = signedUrlCache[fotoUrl];
+  let signedUrl = (cached && cached.expira > Date.now()) ? cached.url : null;
+
+  document.getElementById('foto-img').style.display = 'none';
+  try {
+    if (!signedUrl) {
+      const { data, error } = await sb.storage.from('prescricoes').createSignedUrl(cleanPath, 3600);
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error('Sem URL assinada retornada pelo Supabase');
+      signedUrl = data.signedUrl;
+      signedUrlCache[fotoUrl] = { url: signedUrl, expira: Date.now() + 55*60*1000 };
+    }
+
+    document.getElementById('foto-img').src = signedUrl;
+    document.getElementById('foto-img').style.display = 'block';
+    document.getElementById('foto-loading').style.display = 'none';
+    fotoModalContext.signedUrl = signedUrl;
+
+    /* 3. Salva a imagem no Cache Storage para a próxima vez ser instantânea e sem egress */
+    if ('caches' in window) {
+      fetch(signedUrl).then(resp => {
+        if (resp.ok) caches.open(IMG_CACHE_NAME).then(cache => cache.put(cleanPath, resp.clone()));
+      }).catch(()=>{});
+    }
+  } catch(e) {
+    console.error('Erro ao carregar foto:', e);
+    document.getElementById('foto-loading').textContent = '❌ Erro ao carregar imagem: ' + (e.message || 'desconhecido') + '. Verifique se o bucket "prescricoes" existe e tem a política de leitura autenticada.';
+  }
+}
+function closeFoto() { document.getElementById('modal-foto').classList.remove('open'); }
+
+async function analisarFotoComIA() {
+  const { prescricaoId, signedUrl } = fotoModalContext;
+  if (!prescricaoId || !signedUrl) { showToast('Carregue a foto antes de analisar.'); return; }
+
+  const btn = document.getElementById('btn-analisar-ia');
+  const status = document.getElementById('ia-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Analisando com IA...';
+  status.textContent = '';
+
+  try {
+    // Busca a imagem já carregada e converte para base64 (sem precisar baixar de novo via signed URL nova)
+    const imgResp = await fetch(signedUrl);
+    const blob = await imgResp.blob();
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const resp = await fetch('/.netlify/functions/analisar-foto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prescricaoId, imageBase64: base64, mimeType: blob.type || 'image/jpeg' })
+    });
+    const result = await resp.json();
+
+    if (!resp.ok) {
+      status.textContent = '❌ ' + (result.error || 'Erro ao analisar a imagem.');
+      status.style.color = '#c53030';
+    } else if (result.medicamentosSalvos > 0) {
+      status.textContent = `✅ ${result.medicamentosSalvos} medicamento(s) identificado(s) e adicionado(s) à prescrição!`;
+      status.style.color = 'var(--green-mid)';
+      await loadPrescricoes();
+    } else {
+      status.textContent = result.aviso || 'Nenhum medicamento identificado nesta imagem.';
+      status.style.color = 'var(--gray-mid)';
+    }
+  } catch (e) {
+    console.error('Erro ao chamar análise de IA:', e);
+    status.textContent = '❌ Erro ao conectar com o serviço de análise.';
+    status.style.color = '#c53030';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🤖 Identificar medicamentos com IA';
+  }
+}
+
+function verDetalhes(id) {
+  const p = allPrescricoes.find(x => x.id === id);
+  if (!p) return;
+  const meds = (p.prescricao_medicamentos || []);
+  const obs = (p.observacoes || '').replace(/\n/g,'<br>');
+  const analiseInfo = (p.status === 'analisado')
+    ? `<div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Analisado por</span><div style="margin-top:4px;font-size:13px;color:var(--green-mid);font-weight:600">${p.analisado_por_email ? '✓ '+p.analisado_por_email.split('@')[0] : '✓ Admin'}${p.analisado_em ? ' — '+formatDate(p.analisado_em) : ''}</div></div>`
+    : '';
+  document.getElementById('det-body').innerHTML = `
+    <div style="display:grid;gap:12px">
+      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Petshop</span><div style="font-weight:600;margin-top:4px">${p.local_nome || '—'}</div></div>
+      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Veterinário</span><div style="font-weight:600;margin-top:4px">${p.veterinario_nome || '—'}</div></div>
+      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Bairro</span><div style="margin-top:4px">${p.bairro_nome || '—'}</div></div>
+      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Status</span><div style="margin-top:4px">${p.status}</div></div>
+      ${analiseInfo}
+      ${meds.length ? `<div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Medicamentos</span><div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">${meds.map(m=>`<span class="med-pill">${m.origem === 'ia' ? '🤖' : '💊'} ${medNome(m)}${m.dosagem?' — '+m.dosagem:''}</span>`).join('')}</div></div>` : ''}
+      ${obs ? `<div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Observações</span><div style="margin-top:4px;font-size:13px;color:var(--gray-dark)">${obs}</div></div>` : ''}
+      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Recebido em</span><div style="margin-top:4px;font-size:13px">${formatDate(p.criado_em)}</div></div>
+    </div>`;
+  document.getElementById('modal-det').classList.add('open');
+}
+
+/* ════════════ RANKINGS (dashboard) ════════════ */
+function buildRanking(items, getLabel, getSub) {
+  const counts = {};
+  items.forEach(it => {
+    const key = getLabel(it);
+    if (!key) return;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5);
+}
+function renderRankingHTML(ranking, tipo) {
+  if (!ranking.length) return `<div class="empty"><div class="empty-icon">📊</div>Sem dados ainda</div>`;
+  const max = ranking[0][1];
+  return ranking.map((r, i) => `
+    <div class="ranking-row ranking-row-link" onclick="goToFilteredPrescricoes('${tipo}', '${r[0].replace(/'/g,"\\'")}')" title="Ver prescrições de ${r[0]}">
+      <div class="ranking-pos">${i+1}</div>
+      <div class="ranking-name">${r[0]}</div>
+      <div class="ranking-bar-wrap"><div class="ranking-bar" style="width:${(r[1]/max*100)}%"></div></div>
+      <div class="ranking-val">${r[1]}</div>
+    </div>`).join('');
+}
+function renderRankings() {
+  const rBairros = buildRanking(allPrescricoes, p => p.bairro_nome);
+  document.getElementById('rank-bairros').innerHTML = renderRankingHTML(rBairros, 'bairro');
+
+  const rPetshops = buildRanking(allPrescricoes, p => p.local_nome);
+  document.getElementById('rank-petshops').innerHTML = renderRankingHTML(rPetshops, 'petshop');
+
+  const rVets = buildRanking(allPrescricoes, p => p.veterinario_nome);
+  document.getElementById('rank-veterinarios').innerHTML = renderRankingHTML(rVets, 'veterinario');
+
+  const allMeds = [];
+  allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));
+  const rMeds = buildRanking(allMeds, m => medNome(m));
+  document.getElementById('rank-medicamentos').innerHTML = renderRankingHTML(rMeds, 'medicamento');
+}
+
+/* ════════════ GRÁFICOS (análise detalhada) ════════════ */
+function makeGradient(ctx, chartArea, colorTop, colorBottom) {
+  if (!chartArea) return colorTop;
+  const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+  gradient.addColorStop(0, colorTop);
+  gradient.addColorStop(1, colorBottom);
+  return gradient;
+}
+function makeGradientH(ctx, chartArea, colorLeft, colorRight) {
+  if (!chartArea) return colorLeft;
+  const gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+  gradient.addColorStop(0, colorLeft);
+  gradient.addColorStop(1, colorRight);
+  return gradient;
+}
+
+function chartBaseOptions(extra) {
+  const gridColor = 'rgba(14,59,62,0.08)';
+  const textColor = '#3D4544';
+  return Object.assign({
+    responsive: true,
+    maintainAspectRatio: false,
+    onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0E3B3E',
+        titleColor: '#FFFFFF', bodyColor: '#EAF2F1',
+        padding: 12, cornerRadius: 8, displayColors: false,
+        titleFont: { family: "'Sora', sans-serif", weight: '700', size: 13 },
+        bodyFont: { family: "'DM Sans', sans-serif", size: 13 },
+        callbacks: {
+          label: (ctx) => ` ${ctx.parsed.y ?? ctx.parsed.x} prescrições`,
+          afterLabel: () => '🔗 Clique para ver a lista filtrada'
+        }
+      }
+    },
+    scales: {
+      x: { grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor, font: { family: "'DM Sans', sans-serif", size: 12 } } },
+      y: { grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor, font: { family: "'DM Sans', sans-serif", size: 12 }, precision: 0 }, beginAtZero: true }
+    }
+  }, extra || {});
+}
+
+/* Navega para a lista de prescrições já filtrada pelo item clicado no gráfico */
+function goToFilteredPrescricoes(tipo, valor) {
+  showPanel('prescricoes', document.querySelector('[onclick*="\'prescricoes\'"]'));
+  if (tipo === 'bairro') {
+    document.getElementById('bairro-filter').value = valor;
+    filterBairro(valor);
+  } else {
+    document.getElementById('search-input').value = valor;
+    handleSearch(valor);
+  }
+  showToast(`🔗 Filtrando por: ${valor}`);
+}
+
+function renderCharts() {
+  const rBairros = buildRanking(allPrescricoes, p => p.bairro_nome).slice(0,10);
+  const allMeds = [];
+  allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));
+  const rMeds = buildRanking(allMeds, m => medNome(m)).slice(0,10);
+  const rPetshops = buildRanking(allPrescricoes, p => p.local_nome).slice(0,10);
+
+  if (chartBairros) chartBairros.destroy();
+  if (chartMedicamentos) chartMedicamentos.destroy();
+  if (chartPetshops) chartPetshops.destroy();
+
+  chartBairros = new Chart(document.getElementById('chart-bairros'), {
+    type: 'bar',
+    data: {
+      labels: rBairros.map(r=>r[0]),
+      datasets: [{
+        label: 'Prescrições', data: rBairros.map(r=>r[1]),
+        backgroundColor: (ctx) => makeGradient(ctx.chart.ctx, ctx.chart.chartArea, '#0E3B3E', '#4FA89C'),
+        borderRadius: 6, borderSkipped: false, maxBarThickness: 46
+      }]
+    },
+    options: chartBaseOptions({
+      onClick: (evt, elements) => { if (elements.length) goToFilteredPrescricoes('bairro', rBairros[elements[0].index][0]); }
+    })
+  });
+
+  chartMedicamentos = new Chart(document.getElementById('chart-medicamentos'), {
+    type: 'bar',
+    data: {
+      labels: rMeds.map(r=>r[0]),
+      datasets: [{
+        label: 'Prescrições', data: rMeds.map(r=>r[1]),
+        backgroundColor: (ctx) => makeGradientH(ctx.chart.ctx, ctx.chart.chartArea, '#E8630A', '#F2934C'),
+        borderRadius: 6, borderSkipped: false, maxBarThickness: 28
+      }]
+    },
+    options: chartBaseOptions({
+      indexAxis: 'y',
+      onClick: (evt, elements) => { if (elements.length) goToFilteredPrescricoes('medicamento', rMeds[elements[0].index][0]); }
+    })
+  });
+
+  chartPetshops = new Chart(document.getElementById('chart-petshops'), {
+    type: 'bar',
+    data: {
+      labels: rPetshops.map(r=>r[0]),
+      datasets: [{
+        label: 'Prescrições', data: rPetshops.map(r=>r[1]),
+        backgroundColor: (ctx) => makeGradient(ctx.chart.ctx, ctx.chart.chartArea, '#1B5E5E', '#E5F2F0'),
+        borderRadius: 6, borderSkipped: false, maxBarThickness: 46
+      }]
+    },
+    options: chartBaseOptions({
+      onClick: (evt, elements) => { if (elements.length) goToFilteredPrescricoes('petshop', rPetshops[elements[0].index][0]); }
+    })
+  });
+}
+
+/* ════════════ VETERINÁRIOS (CRUD) ════════════ */
+async function loadVets() {
+  const { data } = await sb.from('veterinarios').select('*, locais(nome), bairros(nome)').order('nome');
+  allVets = data || [];
+  document.getElementById('kpi-vets').textContent = allVets.length;
+  const tbody = document.getElementById('vet-tbody');
+  if (!allVets.length) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:2rem">Nenhum veterinário cadastrado.<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="openVetModal()">+ Cadastrar primeiro veterinário</button></td></tr>`; return; }
+  tbody.innerHTML = allVets.map(v => `
+    <tr>
+      <td><div class="td-main">${v.nome}</div><div class="td-sub">${v.email||''}</div></td>
+      <td><code style="font-size:12px;background:var(--gray-pale);padding:3px 8px;border-radius:5px">CRMV-MA ${v.crmv}</code></td>
+      <td>${v.especialidade||'—'}</td>
+      <td><span class="badge badge-blue">📍 ${v.bairros?.nome||'—'}</span></td>
+      <td>${v.locais?.nome||'—'}<div class="td-sub">${v.telefone||''}</div></td>
+      <td>${v.ativo ? '<span class="badge badge-green">Ativo</span>' : '<span class="badge badge-gray">Inativo</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick='openVetModal(${JSON.stringify(v).replace(/'/g,"&#39;")})'>Editar</button></td>
+    </tr>`).join('');
+}
+function openVetModal(vet) {
+  document.getElementById('modal-vet').classList.add('open');
+  document.getElementById('vet-id').value = '';
+  document.getElementById('vet-nome').value = '';
+  document.getElementById('vet-crmv').value = '';
+  document.getElementById('vet-tel').value = '';
+  document.getElementById('vet-email').value = '';
+  document.getElementById('vet-esp').value = '';
+  document.getElementById('vet-ativo').checked = true;
+  document.getElementById('vet-delete-btn').style.display = 'none';
+  document.getElementById('vet-modal-title').textContent = '🩺 Novo Veterinário';
+  const selLocal = document.getElementById('vet-local');
+  selLocal.innerHTML = '<option value="">Sem vínculo</option>' + allLocais.map(l => `<option value="${l.id}">${l.nome}</option>`).join('');
+  document.getElementById('vet-bairro').value = '';
+  selLocal.value = '';
+  if (vet && vet.id) {
+    document.getElementById('vet-id').value = vet.id;
+    document.getElementById('vet-nome').value = vet.nome || '';
+    document.getElementById('vet-crmv').value = vet.crmv || '';
+    document.getElementById('vet-tel').value = vet.telefone || '';
+    document.getElementById('vet-email').value = vet.email || '';
+    document.getElementById('vet-esp').value = vet.especialidade || '';
+    document.getElementById('vet-bairro').value = vet.bairro_id || '';
+    selLocal.value = vet.local_id || '';
+    document.getElementById('vet-ativo').checked = !!vet.ativo;
+    document.getElementById('vet-delete-btn').style.display = 'inline-flex';
+    document.getElementById('vet-modal-title').textContent = '🩺 Editar Veterinário';
+  }
+}
+function closeVetModal() { document.getElementById('modal-vet').classList.remove('open'); }
+async function salvarVet() {
+  const id = document.getElementById('vet-id').value;
+  const nome = document.getElementById('vet-nome').value.trim();
+  const crmv = document.getElementById('vet-crmv').value.trim();
+  const email = document.getElementById('vet-email').value.trim();
+  const bairro_id = document.getElementById('vet-bairro').value;
+  if (!nome || !crmv || !email || !bairro_id) { showToast('Preencha nome, CRMV, e-mail e bairro.'); return; }
+  const payload = { nome, crmv, email, telefone: document.getElementById('vet-tel').value.trim(), especialidade: document.getElementById('vet-esp').value.trim(), local_id: document.getElementById('vet-local').value || null, bairro_id, ativo: document.getElementById('vet-ativo').checked };
+  let error;
+  if (id) ({ error } = await sb.from('veterinarios').update(payload).eq('id', id));
+  else ({ error } = await sb.from('veterinarios').insert(payload));
+  if (error) { console.error(error); showToast('Erro ao salvar veterinário: ' + error.message); return; }
+  closeVetModal(); showToast(id ? '✅ Veterinário atualizado!' : '✅ Veterinário cadastrado!');
+  await loadVets();
+}
+async function excluirVet() {
+  const id = document.getElementById('vet-id').value;
+  if (!id || !confirm('Tem certeza que deseja excluir este veterinário?')) return;
+  const { error } = await sb.from('veterinarios').delete().eq('id', id);
+  if (error) { showToast('Erro ao excluir: ' + error.message); return; }
+  closeVetModal(); showToast('🗑️ Veterinário excluído.');
+  await loadVets();
+}
+
+/* ════════════ PETSHOPS (CRUD) ════════════ */
+async function loadLocais() {
+  const { data } = await sb.from('locais').select('*, bairros(nome)').order('nome');
+  allLocais = data || [];
+  document.getElementById('kpi-locais').textContent = allLocais.length;
+  const tbody = document.getElementById('local-tbody');
+  if (!allLocais.length) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:2rem">Nenhum petshop cadastrado.<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="openLocalModal()">+ Cadastrar primeiro petshop</button></td></tr>`; return; }
+  tbody.innerHTML = allLocais.map(l => `
+    <tr>
+      <td class="td-main">${l.nome}</td>
+      <td>${l.telefone||'—'}</td>
+      <td>${l.endereco||'—'}</td>
+      <td><span class="badge badge-blue">📍 ${l.bairros?.nome||'—'}</span></td>
+      <td>${l.ativo ? '<span class="badge badge-green">Ativo</span>' : '<span class="badge badge-gray">Inativo</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick='openLocalModal(${JSON.stringify(l).replace(/'/g,"&#39;")})'>Editar</button></td>
+    </tr>`).join('');
+
+  /* Popula select de petshop no modal de registro manual */
+  const pmSel = document.getElementById('pm-local-select');
+  pmSel.innerHTML = '<option value="">Selecione um petshop cadastrado...</option>' + allLocais.map(l => `<option value="${l.id}">${l.nome} — ${l.bairros?.nome||''}</option>`).join('');
+}
+function openLocalModal(local) {
+  document.getElementById('modal-local').classList.add('open');
+  document.getElementById('loc-id').value = '';
+  document.getElementById('loc-nome').value = '';
+  document.getElementById('loc-tel').value = '';
+  document.getElementById('loc-cnpj').value = '';
+  document.getElementById('loc-email').value = '';
+  document.getElementById('loc-endereco').value = '';
+  document.getElementById('loc-bairro').value = '';
+  document.getElementById('loc-ativo').checked = true;
+  document.getElementById('loc-delete-btn').style.display = 'none';
+  document.getElementById('local-modal-title').textContent = '🏪 Novo Petshop / Clínica';
+  if (local && local.id) {
+    document.getElementById('loc-id').value = local.id;
+    document.getElementById('loc-nome').value = local.nome || '';
+    document.getElementById('loc-tel').value = local.telefone || '';
+    document.getElementById('loc-cnpj').value = local.cnpj || '';
+    document.getElementById('loc-email').value = local.email || '';
+    document.getElementById('loc-endereco').value = local.endereco || '';
+    document.getElementById('loc-bairro').value = local.bairro_id || '';
+    document.getElementById('loc-ativo').checked = !!local.ativo;
+    document.getElementById('loc-delete-btn').style.display = 'inline-flex';
+    document.getElementById('local-modal-title').textContent = '🏪 Editar Petshop';
+  }
+}
+function closeLocalModal() { document.getElementById('modal-local').classList.remove('open'); }
+async function salvarLocal() {
+  const id = document.getElementById('loc-id').value;
+  const nome = document.getElementById('loc-nome').value.trim();
+  const bairro_id = document.getElementById('loc-bairro').value;
+  if (!nome || !bairro_id) { showToast('Preencha nome e bairro.'); return; }
+  const payload = { nome, telefone: document.getElementById('loc-tel').value.trim(), cnpj: document.getElementById('loc-cnpj').value.trim(), email: document.getElementById('loc-email').value.trim(), endereco: document.getElementById('loc-endereco').value.trim(), bairro_id, ativo: document.getElementById('loc-ativo').checked };
+  let error;
+  if (id) ({ error } = await sb.from('locais').update(payload).eq('id', id));
+  else ({ error } = await sb.from('locais').insert(payload));
+  if (error) { console.error(error); showToast('Erro ao salvar petshop: ' + error.message); return; }
+  closeLocalModal(); showToast(id ? '✅ Petshop atualizado!' : '✅ Petshop cadastrado!');
+  await loadLocais();
+}
+async function excluirLocal() {
+  const id = document.getElementById('loc-id').value;
+  if (!id || !confirm('Tem certeza que deseja excluir este petshop?')) return;
+  const { error } = await sb.from('locais').delete().eq('id', id);
+  if (error) { showToast('Erro ao excluir: ' + error.message); return; }
+  closeLocalModal(); showToast('🗑️ Petshop excluído.');
+  await loadLocais();
+}
+
+/* ════════════ REGISTRAR PRESCRIÇÃO MANUALMENTE (admin) ════════════ */
+let pmMedCount = 0;
+function openPrescManual() {
+  document.getElementById('modal-presc-manual').classList.add('open');
+  document.getElementById('pm-local-select').value = '';
+  document.getElementById('pm-local-nome').value = '';
+  document.getElementById('pm-vet-nome').value = '';
+  document.getElementById('pm-bairro').value = '';
+  document.getElementById('pm-obs').value = '';
+  document.getElementById('pm-vet-select').innerHTML = '<option value="">Selecione o petshop primeiro...</option>';
+  document.getElementById('pm-meds-list').innerHTML = '';
+  pmMedCount = 0;
+  addPmMed();
+}
+function closePrescManual() { document.getElementById('modal-presc-manual').classList.remove('open'); }
+
+function onPmLocalChange() {
+  const localId = document.getElementById('pm-local-select').value;
+  const vetSel = document.getElementById('pm-vet-select');
+  if (!localId) { vetSel.innerHTML = '<option value="">Selecione o petshop primeiro...</option>'; return; }
+  const vetsDoLocal = allVets.filter(v => v.local_id === localId);
+  vetSel.innerHTML = vetsDoLocal.length
+    ? '<option value="">Selecione o veterinário...</option>' + vetsDoLocal.map(v => `<option value="${v.id}">${v.nome} — CRMV-MA ${v.crmv}</option>`).join('')
+    : '<option value="">Nenhum veterinário vinculado — digite manualmente abaixo</option>';
+  const local = allLocais.find(l => l.id === localId);
+  if (local) {
+    document.getElementById('pm-local-nome').value = local.nome;
+    if (local.bairro_id) document.getElementById('pm-bairro').value = local.bairro_id;
+  }
+}
+
+function addPmMed() {
+  const list = document.getElementById('pm-meds-list');
+  const row = document.createElement('div');
+  row.style.display = 'grid'; row.style.gridTemplateColumns = '1.4fr 1fr auto'; row.style.gap = '8px'; row.style.marginBottom = '8px';
+  const rowId = 'pmmed-' + (pmMedCount++);
+  row.id = rowId;
+  row.innerHTML = `
+    <select class="form-select" name="pm-med-select" onchange="handlePmMedChange(this)"></select>
+    <input class="form-input" type="text" placeholder="Dosagem / qtd." name="pm-med-dose" />
+    <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('${rowId}').remove()" title="Remover">×</button>
+  `;
+  list.appendChild(row);
+  const sel = row.querySelector('[name="pm-med-select"]');
+  sel.innerHTML = '<option value="">Selecione...</option>' + allMedicamentos.filter(m=>m.ativo).map(m => `<option value="${m.id}">${m.nome}${m.apresentacao?' — '+m.apresentacao:''}</option>`).join('') + '<option value="outro">Outro (digitar)</option>';
+}
+function handlePmMedChange(sel) {
+  const row = sel.closest('div[id^="pmmed-"]');
+  let manual = row.querySelector('[name="pm-med-manual"]');
+  if (sel.value === 'outro') {
+    if (!manual) {
+      manual = document.createElement('input');
+      manual.className = 'form-input'; manual.name = 'pm-med-manual'; manual.placeholder = 'Nome do medicamento';
+      manual.style.gridColumn = '1 / -1'; manual.style.marginTop = '4px';
+      row.appendChild(manual);
+    }
+  } else if (manual) manual.remove();
+}
+
+async function salvarPrescManual() {
+  const localNome = document.getElementById('pm-local-nome').value.trim() || allLocais.find(l=>l.id===document.getElementById('pm-local-select').value)?.nome || '';
+  const localId = document.getElementById('pm-local-select').value || null;
+  const vetSelVal = document.getElementById('pm-vet-select').value;
+  const vetNomeManual = document.getElementById('pm-vet-nome').value.trim();
+  const vetNome = vetNomeManual || allVets.find(v=>v.id===vetSelVal)?.nome || '';
+  const bairroId = document.getElementById('pm-bairro').value;
+  const bairroNome = allBairros.find(b=>b.id===bairroId)?.nome || '';
+  const obs = document.getElementById('pm-obs').value;
+
+  if (!localNome || !bairroId) { showToast('Preencha petshop e bairro.'); return; }
+
+  const prescId = crypto.randomUUID();
+  const { error: prescErr } = await sb.from('prescricoes').insert({
+    id: prescId,
+    local_id: localId,
+    veterinario_id: vetSelVal || null,
+    bairro_id: bairroId,
+    local_nome: localNome,
+    veterinario_nome: vetNome,
+    bairro_nome: bairroNome,
+    observacoes: obs,
+    origem: 'admin',
+    status: 'analisado',
+    analisado_por: currentUser?.id || null,
+    analisado_em: new Date().toISOString()
+  });
+  if (prescErr) { showToast('Erro: ' + prescErr.message); return; }
+
+  const rows = [...document.querySelectorAll('#pm-meds-list > div')];
+  const meds = [];
+  rows.forEach((row, i) => {
+    const sel = row.querySelector('[name="pm-med-select"]');
+    const dose = row.querySelector('[name="pm-med-dose"]')?.value || '';
+    const manual = row.querySelector('[name="pm-med-manual"]')?.value || '';
+    if (!sel || !sel.value) return;
+    if (sel.value === 'outro') { if (manual) meds.push({ prescricao_id: prescId, medicamento_id: null, nome_livre: manual, dosagem: dose, ordem: i }); }
+    else meds.push({ prescricao_id: prescId, medicamento_id: sel.value, nome_livre: null, dosagem: dose, ordem: i });
+  });
+  if (meds.length) await sb.from('prescricao_medicamentos').insert(meds);
+
+  closePrescManual();
+  showToast('✅ Prescrição registrada com sucesso!');
+  await loadPrescricoes();
+}
+
+/* ════════════ UTILITÁRIOS ════════════ */
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso); const now = new Date(); const diff = Math.floor((now - d) / 1000);
+  if (diff < 60) return 'agora mesmo';
+  if (diff < 3600) return `há ${Math.floor(diff/60)} min`;
+  if (diff < 86400) return `há ${Math.floor(diff/3600)}h`;
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3500); }
+
+['modal-foto','modal-det','modal-presc-manual','modal-local','modal-vet','modal-med','modal-bairro'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e){ if(e.target===this) this.classList.remove('open'); });
+});
+
+(async () => {
+  const { data:{ session } } = await sb.auth.getSession();
+  if (session) { hideLoginScreen(); initAdmin(session.user); }
+})();
+</script>
+</body>
+</html>

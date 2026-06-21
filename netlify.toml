@@ -1,0 +1,55 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Rota secreta do admin — só quem souber a URL acessa
+[[redirects]]
+  from = "/gerencia"
+  to = "/gerencia.html"
+  status = 200
+
+[[redirects]]
+  from = "/gerencia/*"
+  to = "/gerencia.html"
+  status = 200
+
+# Bloqueia acesso direto ao arquivo admin.html antigo
+[[redirects]]
+  from = "/admin.html"
+  to = "/"
+  status = 301
+
+[[redirects]]
+  from = "/admin"
+  to = "/"
+  status = 301
+
+# Fallback SPA
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Impede cache agressivo de HTML — evita versão antiga ficar "presa" no navegador após deploy
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+# Impede indexação do painel de gerência
+[[headers]]
+  for = "/gerencia*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"

@@ -527,10 +527,12 @@
             resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
           }, 'image/jpeg', quality);
         };
-        img.onerror = () => resolve(file);
+        /* Se o navegador não conseguir decodificar (ex: HEIC do iPhone), devolve o original
+           marcado para que o chamador saiba que não foi comprimido */
+        img.onerror = () => { file._naoComprimido = true; resolve(file); };
         img.src = e.target.result;
       };
-      reader.onerror = () => resolve(file);
+      reader.onerror = () => { file._naoComprimido = true; resolve(file); };
       reader.readAsDataURL(file);
     });
   }
@@ -621,19 +623,27 @@
       if (fotoInput.files && fotoInput.files[0]) {
         const originalFile = fotoInput.files[0];
         const file = await compressImage(originalFile);
-        const ext = file.type === 'image/jpeg' ? 'jpg' : file.name.split('.').pop().toLowerCase();
-        const path = `${prescId}/foto.${ext}`;
-        const { error: storErr } = await sb.storage.from('prescricoes').upload(path, file, { upsert: true, contentType: file.type });
-        if (storErr) {
-          console.error('Erro ao enviar foto:', storErr);
-          avisoFoto = ' (mas a foto não foi enviada: ' + storErr.message + ')';
+        const TAMANHO_MAX = 10 * 1024 * 1024; // 10MB — mesmo limite configurado no bucket
+
+        if (file.size > TAMANHO_MAX) {
+          avisoFoto = file._naoComprimido
+            ? ' (a foto não foi enviada: o formato da imagem não pôde ser processado pelo navegador — tente tirar a foto novamente ou enviar como JPG/PNG)'
+            : ' (a foto não foi enviada: o arquivo é muito grande, mesmo após compressão — tente uma foto com menor resolução)';
         } else {
-          fotoEnviada = true;
-          compressedFileForAI = file;
-          const { error: updErr } = await sb.from('prescricoes').update({ foto_url: path }).eq('id', prescId);
-          if (updErr) {
-            console.error('Erro ao salvar referência da foto:', updErr);
-            avisoFoto = ' (mas houve erro ao registrar a foto: ' + updErr.message + ')';
+          const ext = file.type === 'image/jpeg' ? 'jpg' : file.name.split('.').pop().toLowerCase();
+          const path = `${prescId}/foto.${ext}`;
+          const { error: storErr } = await sb.storage.from('prescricoes').upload(path, file, { upsert: true, contentType: file.type });
+          if (storErr) {
+            console.error('Erro ao enviar foto:', storErr);
+            avisoFoto = ' (mas a foto não foi enviada: ' + storErr.message + ')';
+          } else {
+            fotoEnviada = true;
+            compressedFileForAI = file;
+            const { error: updErr } = await sb.from('prescricoes').update({ foto_url: path }).eq('id', prescId);
+            if (updErr) {
+              console.error('Erro ao salvar referência da foto:', updErr);
+              avisoFoto = ' (mas houve erro ao registrar a foto: ' + updErr.message + ')';
+            }
           }
         }
       }

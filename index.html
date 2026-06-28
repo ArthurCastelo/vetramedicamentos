@@ -486,8 +486,8 @@
     try {
       const { error } = await sb.auth.signInWithPassword({ email, password: senha });
       if (error) throw error;
-      showToast('✅ Login realizado!');
-      setTimeout(() => closeLogin(), 1200);
+      showToast('✅ Login realizado! Redirecionando...');
+      setTimeout(() => { window.location.href = '/vet'; }, 800);
     } catch(err) {
       document.getElementById('login-error').classList.add('show');
     }

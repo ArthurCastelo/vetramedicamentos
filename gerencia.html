@@ -138,6 +138,9 @@
 
     .filter-bar { display:flex; gap:8px; margin-bottom:1.25rem; flex-wrap:wrap; align-items:center; }
     .filter-pill { padding:6px 14px; border-radius:20px; border:1.5px solid var(--gray-light); font-size:13px; font-weight:500; cursor:pointer; background:none; font-family:'DM Sans'; color:var(--gray-dark); transition:all .2s; }
+    .checklist-item { display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 2px; }
+    .checklist-item input[type="checkbox"] { width:16px; height:16px; flex-shrink:0; }
+    .checklist-empty { font-size:13px; color:var(--gray-mid); text-align:center; padding:8px; }
     .filter-pill.active { background:var(--green); border-color:var(--green); color:var(--white); }
     .filter-pill:hover:not(.active) { border-color:var(--green); color:var(--green); }
 
@@ -300,6 +303,23 @@
     <!-- ══ ANÁLISE DETALHADA ══ -->
     <div class="panel" id="panel-analise">
       <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">📁 Importar e Exportar Dados</div><div class="card-sub">Baixe os dados das prescrições em CSV ou importe um arquivo para cadastro em massa</div></div>
+        </div>
+        <div class="card-body-pad" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="exportarPrescricoesCSV()">⬇️ Exportar prescrições (CSV)</button>
+          <button class="btn btn-outline btn-sm" onclick="exportarMedicamentosCSV()">⬇️ Exportar ranking de medicamentos (CSV)</button>
+          <span style="width:1px;height:24px;background:var(--border-col)"></span>
+          <label class="btn btn-outline btn-sm" style="cursor:pointer">
+            ⬆️ Importar prescrições (CSV)
+            <input type="file" accept=".csv" id="import-csv-input" style="display:none" onchange="importarPrescricoesCSV(this)" />
+          </label>
+          <a href="#" onclick="downloadModeloCSV();return false" style="font-size:12px;color:var(--gray-mid);text-decoration:underline">baixar modelo de planilha</a>
+        </div>
+        <div id="import-status" class="card-body-pad" style="display:none;padding-top:0"></div>
+      </div>
+
+      <div class="card">
         <div class="card-header"><div class="card-title">📈 Prescrições por bairro</div></div>
         <div class="card-body-pad"><div style="position:relative;height:340px"><canvas id="chart-bairros" role="img" aria-label="Gráfico de barras de prescrições por bairro">Gráfico de prescrições por bairro</canvas></div></div>
       </div>
@@ -321,7 +341,7 @@
           <button class="btn btn-primary btn-sm" onclick="openVetModal()">+ Novo Veterinário</button>
         </div>
         <div><table>
-          <thead><tr><th>Veterinário</th><th>CRMV-MA</th><th>Especialidade</th><th>Bairro</th><th>Petshop</th><th>Status</th><th>Ações</th></tr></thead>
+          <thead><tr><th>Veterinário</th><th>CRMV-MA</th><th>Especialidade / Categoria</th><th>Bairro</th><th>Petshops</th><th>Status</th><th>Ações</th></tr></thead>
           <tbody id="vet-tbody"><tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando...</td></tr></tbody>
         </table></div>
       </div>
@@ -471,10 +491,22 @@
     </div>
     <div class="form-group"><label class="form-label">E-mail *</label><input class="form-input" type="email" id="vet-email" placeholder="vet@email.com" /></div>
     <div class="form-group"><label class="form-label">Especialidade</label><input class="form-input" type="text" id="vet-esp" placeholder="Ex: Clínica Geral, Dermatologia..." /></div>
-    <div class="of-grid">
-      <div class="form-group"><label class="form-label">Petshop / Clínica</label><select class="form-select" id="vet-local"><option value="">Sem vínculo</option></select></div>
-      <div class="form-group"><label class="form-label">Bairro *</label><select class="form-select" id="vet-bairro"><option value="">Selecione...</option></select></div>
+
+    <div class="form-group">
+      <label class="form-label">Categoria de atuação *</label>
+      <div class="role-tabs" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button type="button" class="filter-pill" id="vet-cat-fixo" onclick="setVetCategoria('fixo')" style="padding:10px;text-align:center">🏪 Fixo (1 petshop)</button>
+        <button type="button" class="filter-pill" id="vet-cat-volante" onclick="setVetCategoria('volante')" style="padding:10px;text-align:center">🚐 Volante (vários ou nenhum)</button>
+      </div>
+      <p style="font-size:12px;color:var(--gray-mid);margin-top:6px">Volante = atua em mais de um petshop, ou ainda não está vinculado a nenhum.</p>
     </div>
+
+    <div class="form-group">
+      <label class="form-label">Petshops vinculados</label>
+      <div id="vet-locais-checklist" style="max-height:180px;overflow-y:auto;border:1.5px solid var(--border-col);border-radius:var(--radius-sm);padding:10px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
+    <div class="form-group"><label class="form-label">Bairro *</label><select class="form-select" id="vet-bairro"><option value="">Selecione...</option></select></div>
     <div class="form-group" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="vet-ativo" checked style="width:16px;height:16px" /><label class="form-label" style="margin:0" for="vet-ativo">Veterinário ativo</label></div>
     <div style="display:flex;gap:10px;margin-top:.5rem">
       <button class="btn btn-primary" style="flex:1;justify-content:center;padding:12px" onclick="salvarVet()">Salvar</button>
@@ -569,7 +601,8 @@ function showPanel(id, el) {
 async function loadAll() {
   await loadBairros();
   await loadMedicamentos();
-  await Promise.all([ loadPrescricoes(), loadVets(), loadLocais() ]);
+  await loadLocais();
+  await Promise.all([ loadPrescricoes(), loadVets() ]);
 }
 
 /* ════════════ BAIRROS ════════════ */
@@ -1019,6 +1052,168 @@ function goToFilteredPrescricoes(tipo, valor) {
   showToast(`🔗 Filtrando por: ${valor}`);
 }
 
+/* ════════════ EXPORTAR / IMPORTAR CSV ════════════ */
+
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function downloadCSV(filename, rows) {
+  const csvContent = rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM para acentuação no Excel
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportarPrescricoesCSV() {
+  if (!allPrescricoes.length) { showToast('Não há prescrições para exportar.'); return; }
+  const header = ['ID', 'Petshop', 'Veterinário', 'Bairro', 'Status', 'Origem', 'Medicamentos', 'Telefone', 'Observações', 'Criado em', 'Analisado por', 'Analisado em'];
+  const rows = [header];
+  allPrescricoes.forEach(p => {
+    const meds = (p.prescricao_medicamentos || []).map(m => medNome(m) + (m.dosagem ? ` (${m.dosagem})` : '')).join(' | ');
+    const tel = p.observacoes && p.observacoes.includes('Telefone:') ? p.observacoes.split('Telefone:')[1].trim() : '';
+    rows.push([
+      p.id, p.local_nome || '', p.veterinario_nome || '', p.bairro_nome || '',
+      p.status, p.origem, meds, tel, p.observacoes || '',
+      p.criado_em, p.analisado_por_email || '', p.analisado_em || ''
+    ]);
+  });
+  downloadCSV(`vetra_prescricoes_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  showToast('✅ Exportado: ' + (rows.length - 1) + ' prescrições.');
+}
+
+function exportarMedicamentosCSV() {
+  const allMeds = [];
+  allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));
+  const ranking = buildRanking(allMeds, m => medNome(m));
+  if (!ranking.length) { showToast('Não há dados de medicamentos para exportar.'); return; }
+  const rows = [['Medicamento', 'Total de prescrições']];
+  ranking.forEach(r => rows.push([r[0], r[1]]));
+  downloadCSV(`vetra_ranking_medicamentos_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  showToast('✅ Ranking de medicamentos exportado.');
+}
+
+function downloadModeloCSV() {
+  const rows = [
+    ['petshop', 'veterinario', 'bairro', 'medicamentos', 'telefone', 'observacoes'],
+    ['PetCenter Cohama', 'Dr. Rafael Matos', 'Cohama', 'Doxiciclina (100mg) | Metronidazol (250mg)', '(98) 99111-2233', 'Exemplo de prescrição importada'],
+  ];
+  downloadCSV('vetra_modelo_importacao.csv', rows);
+}
+
+/* Parser de CSV simples — lida com aspas e vírgulas dentro de campos */
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i+1] === '\n') i++;
+        row.push(field); rows.push(row); row = []; field = '';
+      } else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || (r.length === 1 && r[0].trim() !== ''));
+}
+
+async function importarPrescricoesCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('import-status');
+  statusEl.style.display = 'block';
+  statusEl.innerHTML = '<span class="spinner"></span> Lendo arquivo...';
+
+  try {
+    const text = await file.text();
+    const rows = parseCSV(text.replace(/^\uFEFF/, '')); // remove BOM se existir
+    if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados além do cabeçalho.');
+
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    const idx = {
+      petshop: header.indexOf('petshop'),
+      veterinario: header.indexOf('veterinario'),
+      bairro: header.indexOf('bairro'),
+      medicamentos: header.indexOf('medicamentos'),
+      telefone: header.indexOf('telefone'),
+      observacoes: header.indexOf('observacoes'),
+    };
+    if (idx.petshop === -1 || idx.bairro === -1) {
+      throw new Error('Colunas obrigatórias não encontradas. Use o modelo de planilha (colunas: petshop, veterinario, bairro, medicamentos, telefone, observacoes).');
+    }
+
+    let sucesso = 0, falhas = 0;
+    const linhasDados = rows.slice(1);
+
+    for (const linha of linhasDados) {
+      if (!linha[idx.petshop] || !linha[idx.petshop].trim()) continue;
+
+      const bairroNomeCSV = (linha[idx.bairro] || '').trim();
+      const bairroMatch = allBairros.find(b => b.nome.toLowerCase() === bairroNomeCSV.toLowerCase());
+
+      const prescId = crypto.randomUUID();
+      const { error: prescErr } = await sb.from('prescricoes').insert({
+        id: prescId,
+        local_nome: linha[idx.petshop].trim(),
+        veterinario_nome: idx.veterinario > -1 ? (linha[idx.veterinario] || '').trim() : '',
+        bairro_id: bairroMatch ? bairroMatch.id : null,
+        bairro_nome: bairroMatch ? bairroMatch.nome : bairroNomeCSV,
+        observacoes: (idx.observacoes > -1 ? linha[idx.observacoes] || '' : '') + (idx.telefone > -1 && linha[idx.telefone] ? '\nTelefone: ' + linha[idx.telefone] : ''),
+        origem: 'admin',
+        status: 'analisado',
+        analisado_por: currentUser?.id || null,
+        analisado_em: new Date().toISOString()
+      });
+
+      if (prescErr) { falhas++; continue; }
+
+      if (idx.medicamentos > -1 && linha[idx.medicamentos]) {
+        const medsTexto = linha[idx.medicamentos].split('|').map(s => s.trim()).filter(Boolean);
+        const registros = medsTexto.map((texto, i) => {
+          const match = texto.match(/^(.+?)\s*\((.+)\)$/); // "Nome (dosagem)"
+          const nome = match ? match[1].trim() : texto;
+          const dosagem = match ? match[2].trim() : '';
+          const medCatalogo = allMedicamentos.find(m => m.nome.toLowerCase() === nome.toLowerCase());
+          return {
+            prescricao_id: prescId,
+            medicamento_id: medCatalogo ? medCatalogo.id : null,
+            nome_livre: medCatalogo ? null : nome,
+            dosagem, ordem: i, origem: 'manual'
+          };
+        });
+        if (registros.length) await sb.from('prescricao_medicamentos').insert(registros);
+      }
+      sucesso++;
+    }
+
+    statusEl.innerHTML = `✅ Importação concluída: <strong>${sucesso}</strong> prescrições importadas` + (falhas ? `, ${falhas} com erro` : '') + '.';
+    showToast(`✅ ${sucesso} prescrições importadas!`);
+    await loadPrescricoes();
+
+  } catch (err) {
+    console.error('Erro ao importar CSV:', err);
+    statusEl.innerHTML = '❌ Erro: ' + err.message;
+  } finally {
+    input.value = '';
+  }
+}
+
 function renderCharts() {
   const rBairros = buildRanking(allPrescricoes, p => p.bairro_nome).slice(0,10);
   const allMeds = [];
@@ -1078,23 +1273,62 @@ function renderCharts() {
 }
 
 /* ════════════ VETERINÁRIOS (CRUD) ════════════ */
+let vetLocaisSelecionados = []; // ids dos petshops marcados no checklist do modal atual
+
 async function loadVets() {
-  const { data } = await sb.from('veterinarios').select('*, locais(nome), bairros(nome)').order('nome');
+  const { data } = await sb.from('veterinarios').select('*, bairros(nome)').order('nome');
   allVets = data || [];
+
+  /* Busca os vínculos N:N de uma vez (mais eficiente que 1 query por vet) */
+  const { data: vinculos } = await sb.from('veterinario_locais').select('veterinario_id, local_id, locais(nome)');
+  const vinculosPorVet = {};
+  (vinculos || []).forEach(v => {
+    if (!vinculosPorVet[v.veterinario_id]) vinculosPorVet[v.veterinario_id] = [];
+    vinculosPorVet[v.veterinario_id].push({ id: v.local_id, nome: v.locais?.nome || '—' });
+  });
+  allVets.forEach(v => { v._locaisVinculados = vinculosPorVet[v.id] || []; });
+
   document.getElementById('kpi-vets').textContent = allVets.length;
   const tbody = document.getElementById('vet-tbody');
   if (!allVets.length) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:2rem">Nenhum veterinário cadastrado.<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="openVetModal()">+ Cadastrar primeiro veterinário</button></td></tr>`; return; }
-  tbody.innerHTML = allVets.map(v => `
+  tbody.innerHTML = allVets.map(v => {
+    const catBadge = v.categoria === 'volante' ? '<span class="badge badge-purple">🚐 Volante</span>' : '<span class="badge badge-gray">🏪 Fixo</span>';
+    const petshopsTxt = v._locaisVinculados.length
+      ? v._locaisVinculados.map(l => l.nome).join(', ')
+      : '<span style="color:var(--gray-mid)">Nenhum vínculo</span>';
+    return `
     <tr>
       <td><div class="td-main">${v.nome}</div><div class="td-sub">${v.email||''}</div></td>
       <td><code style="font-size:12px;background:var(--gray-pale);padding:3px 8px;border-radius:5px">CRMV-MA ${v.crmv}</code></td>
-      <td>${v.especialidade||'—'}</td>
+      <td>${v.especialidade||'—'} ${catBadge}</td>
       <td><span class="badge badge-blue">📍 ${v.bairros?.nome||'—'}</span></td>
-      <td>${v.locais?.nome||'—'}<div class="td-sub">${v.telefone||''}</div></td>
+      <td>${petshopsTxt}<div class="td-sub">${v.telefone||''}</div></td>
       <td>${v.ativo ? '<span class="badge badge-green">Ativo</span>' : '<span class="badge badge-gray">Inativo</span>'}</td>
       <td><button class="btn btn-outline btn-sm" onclick='openVetModal(${JSON.stringify(v).replace(/'/g,"&#39;")})'>Editar</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
+
+function setVetCategoria(cat) {
+  document.getElementById('vet-cat-fixo').classList.toggle('active', cat === 'fixo');
+  document.getElementById('vet-cat-volante').classList.toggle('active', cat === 'volante');
+  document.getElementById('modal-vet').dataset.categoria = cat;
+}
+
+function renderVetLocaisChecklist() {
+  const container = document.getElementById('vet-locais-checklist');
+  if (!allLocais.length) { container.innerHTML = '<div class="checklist-empty">Nenhum petshop cadastrado ainda.</div>'; return; }
+  container.innerHTML = allLocais.map(l => `
+    <label class="checklist-item">
+      <input type="checkbox" value="${l.id}" ${vetLocaisSelecionados.includes(l.id) ? 'checked' : ''} onchange="toggleVetLocal('${l.id}', this.checked)" />
+      ${l.nome} <span style="color:var(--gray-mid);font-size:12px">— ${l.bairros?.nome || ''}</span>
+    </label>`).join('');
+}
+function toggleVetLocal(localId, checked) {
+  if (checked && !vetLocaisSelecionados.includes(localId)) vetLocaisSelecionados.push(localId);
+  if (!checked) vetLocaisSelecionados = vetLocaisSelecionados.filter(id => id !== localId);
+}
+
 function openVetModal(vet) {
   document.getElementById('modal-vet').classList.add('open');
   document.getElementById('vet-id').value = '';
@@ -1106,10 +1340,12 @@ function openVetModal(vet) {
   document.getElementById('vet-ativo').checked = true;
   document.getElementById('vet-delete-btn').style.display = 'none';
   document.getElementById('vet-modal-title').textContent = '🩺 Novo Veterinário';
-  const selLocal = document.getElementById('vet-local');
-  selLocal.innerHTML = '<option value="">Sem vínculo</option>' + allLocais.map(l => `<option value="${l.id}">${l.nome}</option>`).join('');
   document.getElementById('vet-bairro').value = '';
-  selLocal.value = '';
+
+  vetLocaisSelecionados = (vet && vet._locaisVinculados) ? vet._locaisVinculados.map(l => l.id) : [];
+  renderVetLocaisChecklist();
+  setVetCategoria((vet && vet.categoria) || 'fixo');
+
   if (vet && vet.id) {
     document.getElementById('vet-id').value = vet.id;
     document.getElementById('vet-nome').value = vet.nome || '';
@@ -1118,28 +1354,61 @@ function openVetModal(vet) {
     document.getElementById('vet-email').value = vet.email || '';
     document.getElementById('vet-esp').value = vet.especialidade || '';
     document.getElementById('vet-bairro').value = vet.bairro_id || '';
-    selLocal.value = vet.local_id || '';
     document.getElementById('vet-ativo').checked = !!vet.ativo;
     document.getElementById('vet-delete-btn').style.display = 'inline-flex';
     document.getElementById('vet-modal-title').textContent = '🩺 Editar Veterinário';
   }
 }
 function closeVetModal() { document.getElementById('modal-vet').classList.remove('open'); }
+
 async function salvarVet() {
   const id = document.getElementById('vet-id').value;
   const nome = document.getElementById('vet-nome').value.trim();
   const crmv = document.getElementById('vet-crmv').value.trim();
   const email = document.getElementById('vet-email').value.trim();
   const bairro_id = document.getElementById('vet-bairro').value;
+  const categoria = document.getElementById('modal-vet').dataset.categoria || 'fixo';
   if (!nome || !crmv || !email || !bairro_id) { showToast('Preencha nome, CRMV, e-mail e bairro.'); return; }
-  const payload = { nome, crmv, email, telefone: document.getElementById('vet-tel').value.trim(), especialidade: document.getElementById('vet-esp').value.trim(), local_id: document.getElementById('vet-local').value || null, bairro_id, ativo: document.getElementById('vet-ativo').checked };
+  if (categoria === 'fixo' && vetLocaisSelecionados.length > 1) {
+    showToast('Veterinário "Fixo" pode ter no máximo 1 petshop. Marque como "Volante" para múltiplos vínculos.');
+    return;
+  }
+
+  /* local_id legado: mantém o primeiro petshop selecionado para compatibilidade com código antigo */
+  const payload = {
+    nome, crmv, email,
+    telefone: document.getElementById('vet-tel').value.trim(),
+    especialidade: document.getElementById('vet-esp').value.trim(),
+    local_id: vetLocaisSelecionados[0] || null,
+    bairro_id, categoria,
+    ativo: document.getElementById('vet-ativo').checked
+  };
+
+  let vetId = id;
   let error;
-  if (id) ({ error } = await sb.from('veterinarios').update(payload).eq('id', id));
-  else ({ error } = await sb.from('veterinarios').insert(payload));
+  if (id) {
+    ({ error } = await sb.from('veterinarios').update(payload).eq('id', id));
+  } else {
+    const { data: inserted, error: insErr } = await sb.from('veterinarios').insert(payload).select().single();
+    error = insErr;
+    if (inserted) vetId = inserted.id;
+  }
   if (error) { console.error(error); showToast('Erro ao salvar veterinário: ' + error.message); return; }
+
+  /* Sincroniza a tabela N:N: remove tudo e reinsere os selecionados (simples e seguro) */
+  if (vetId) {
+    await sb.from('veterinario_locais').delete().eq('veterinario_id', vetId);
+    if (vetLocaisSelecionados.length) {
+      const linhas = vetLocaisSelecionados.map(local_id => ({ veterinario_id: vetId, local_id }));
+      const { error: vinculoErr } = await sb.from('veterinario_locais').insert(linhas);
+      if (vinculoErr) console.error('Erro ao salvar vínculos de petshop:', vinculoErr);
+    }
+  }
+
   closeVetModal(); showToast(id ? '✅ Veterinário atualizado!' : '✅ Veterinário cadastrado!');
   await loadVets();
 }
+
 async function excluirVet() {
   const id = document.getElementById('vet-id').value;
   if (!id || !confirm('Tem certeza que deseja excluir este veterinário?')) return;

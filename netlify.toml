@@ -13,6 +13,17 @@
   to = "/gerencia.html"
   status = 200
 
+# Portal do veterinário — acessado pelo botão "Sou Veterinário" no site público
+[[redirects]]
+  from = "/vet"
+  to = "/vet.html"
+  status = 200
+
+[[redirects]]
+  from = "/vet/*"
+  to = "/vet.html"
+  status = 200
+
 # Bloqueia acesso direto ao arquivo admin.html antigo
 [[redirects]]
   from = "/admin.html"
@@ -48,8 +59,13 @@
   [headers.values]
     Cache-Control = "no-cache, must-revalidate"
 
-# Impede indexação do painel de gerência
+# Impede indexação do painel de gerência e do portal do veterinário
 [[headers]]
   for = "/gerencia*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/vet*"
   [headers.values]
     X-Robots-Tag = "noindex, nofollow"

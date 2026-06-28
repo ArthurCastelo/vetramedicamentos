@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minhas Prescrições — VETRA Distribuidora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --green:#0E3B3E; --green-mid:#1B5E5E; --green-light:#4FA89C;
+      --green-pale:#E5F2F0; --green-accent:#4FA89C;
+      --orange:#E8630A; --orange-light:#FFF3EA;
+      --charcoal:#0E1F1F; --gray-dark:#3D4544; --gray-mid:#7A8786;
+      --gray-light:#C8D2D1; --gray-pale:#F4F7F6; --white:#FFFFFF;
+      --radius:12px; --radius-sm:8px;
+      --shadow:0 2px 12px rgba(0,0,0,0.06);
+      --shadow-hover:0 4px 24px rgba(14,59,62,0.12);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',sans-serif; background:var(--gray-pale); color:var(--charcoal); min-height:100vh; }
+
+    #login-screen { position:fixed; inset:0; background:linear-gradient(135deg,#0a1f1f 0%,#0E3B3E 60%,#0a1715 100%); display:flex; align-items:center; justify-content:center; z-index:1000; }
+    #login-screen.hidden { display:none; }
+    .login-box { background:var(--white); border-radius:20px; padding:2.5rem; width:100%; max-width:400px; box-shadow:0 30px 80px rgba(0,0,0,0.4); }
+    .login-logo { display:flex; align-items:center; gap:12px; margin-bottom:2rem; justify-content:center; }
+    .login-logo-txt { font-family:'Sora',sans-serif; font-weight:800; font-size:20px; color:var(--green); }
+    .login-logo-txt span { color:var(--orange); }
+    .login-title { font-family:'Sora',sans-serif; font-size:1.3rem; font-weight:800; text-align:center; margin-bottom:.3rem; }
+    .login-sub { font-size:13px; color:var(--gray-mid); text-align:center; margin-bottom:1.75rem; }
+    .form-group { margin-bottom:1rem; }
+    .form-label { font-size:13px; font-weight:600; color:var(--gray-dark); margin-bottom:6px; display:block; }
+    .form-input { width:100%; padding:11px 16px; border:1.5px solid var(--gray-light); border-radius:var(--radius-sm); font-family:'DM Sans',sans-serif; font-size:14px; background:var(--white); color:var(--charcoal); outline:none; transition:border .2s; }
+    .form-input:focus { border-color:var(--green); }
+    .btn { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500; cursor:pointer; border:none; transition:all .2s; }
+    .btn-primary { background:var(--green); color:var(--white); }
+    .btn-primary:hover { background:var(--green-mid); }
+    .btn-sm { padding:7px 14px; font-size:13px; }
+    .btn-outline { background:none; border:1.5px solid var(--gray-light); color:var(--gray-dark); }
+    .btn-outline:hover { border-color:var(--green); color:var(--green); background:var(--green-pale); }
+    .login-err { background:#fff5f5; border:1.5px solid #feb2b2; border-radius:var(--radius-sm); padding:10px 14px; font-size:13px; color:#c53030; margin-bottom:1rem; display:none; }
+    .login-err.show { display:block; }
+    .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-radius:50%; border-top-color:white; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background:var(--white); border-bottom:1px solid var(--gray-light);
+      padding:0 1.5rem; height:64px; display:flex; align-items:center; justify-content:space-between;
+      position:sticky; top:0; z-index:40;
+    }
+    .topbar-brand { display:flex; align-items:center; gap:10px; }
+    .topbar-logo { width:34px; height:34px; }
+    .topbar-title { font-family:'Sora',sans-serif; font-weight:800; font-size:16px; color:var(--green); }
+    .topbar-title span { color:var(--orange); }
+    .topbar-user { display:flex; align-items:center; gap:10px; }
+    .user-name { font-size:13px; font-weight:600; }
+    .user-crmv { font-size:11px; color:var(--gray-mid); }
+
+    .main-app { display:none; }
+
+    .content { max-width:900px; margin:0 auto; padding:2rem 1.5rem; }
+
+    .welcome-card {
+      background:linear-gradient(135deg, var(--green) 0%, var(--green-mid) 100%);
+      color:white; border-radius:16px; padding:2rem; margin-bottom:1.5rem;
+    }
+    .welcome-title { font-family:'Sora',sans-serif; font-size:1.4rem; font-weight:800; margin-bottom:.4rem; }
+    .welcome-sub { font-size:14px; opacity:.85; }
+    .welcome-stats { display:flex; gap:2rem; margin-top:1.5rem; }
+    .welcome-stat-num { font-family:'Sora',sans-serif; font-size:1.8rem; font-weight:800; }
+    .welcome-stat-label { font-size:12px; opacity:.8; }
+
+    .section-title { font-family:'Sora',sans-serif; font-size:1.1rem; font-weight:700; margin:1.5rem 0 1rem; }
+
+    .presc-card {
+      background:var(--white); border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:1.25rem 1.5rem; margin-bottom:1rem; border-left:3px solid var(--gray-light);
+    }
+    .presc-card.pendente { border-left-color:var(--orange); }
+    .presc-card.analisado { border-left-color:var(--green); }
+    .presc-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+    .presc-from { font-weight:700; font-size:15px; }
+    .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+    .badge-green { background:var(--green-pale); color:var(--green-mid); }
+    .badge-orange { background:var(--orange-light); color:var(--orange); }
+    .badge-blue { background:#EBF5FF; color:#1A6BBD; }
+    .presc-meds { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+    .med-pill { background:var(--gray-pale); border:1px solid var(--gray-light); border-radius:20px; padding:4px 12px; font-size:12px; font-weight:500; }
+    .presc-time { font-size:12px; color:var(--gray-mid); }
+
+    .empty { text-align:center; padding:3rem 1rem; color:var(--gray-mid); background:var(--white); border-radius:var(--radius); }
+    .empty-icon { font-size:3rem; margin-bottom:1rem; }
+    .empty-title { font-family:'Sora',sans-serif; font-size:1.1rem; font-weight:700; color:var(--gray-dark); margin-bottom:.5rem; }
+
+    .filter-bar { display:flex; gap:8px; margin-bottom:1rem; flex-wrap:wrap; }
+    .filter-pill { padding:6px 14px; border-radius:20px; border:1.5px solid var(--gray-light); font-size:13px; font-weight:500; cursor:pointer; background:none; font-family:'DM Sans'; color:var(--gray-dark); transition:all .2s; }
+    .filter-pill.active { background:var(--green); border-color:var(--green); color:var(--white); }
+
+    .no-match-card {
+      background:var(--orange-light); border:1.5px solid #f5d4b8; border-radius:var(--radius);
+      padding:1.5rem; text-align:center; margin-bottom:1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════ LOGIN ════════════════ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <svg width="44" height="44" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 25 L50 70 L52 70 L38 25 Z" fill="#4FA89C"/>
+        <path d="M70 20 L52 70 L62 70 L80 20 Z" fill="#0E3B3E"/>
+      </svg>
+      <div><div class="login-logo-txt">VETRA <span>DISTRIBUIDORA</span></div><div style="font-size:11px;color:var(--gray-mid)">Área do Veterinário</div></div>
+    </div>
+    <div class="login-title">Acesse sua conta</div>
+    <div class="login-sub">Entre com o e-mail e senha cadastrados pela VETRA</div>
+    <div class="login-err" id="login-err">E-mail ou senha incorretos.</div>
+    <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="vet-email-login" placeholder="seu@email.com" /></div>
+    <div class="form-group"><label class="form-label">Senha</label><input class="form-input" type="password" id="vet-senha-login" placeholder="••••••••" onkeydown="if(event.key==='Enter')vetLogin()" /></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;margin-top:.25rem" onclick="vetLogin()" id="vet-login-btn">Entrar</button>
+    <div style="text-align:center;margin-top:1rem;font-size:13px;color:var(--gray-mid)">
+      Sem cadastro? <a href="https://wa.me/5598330168861?text=Ol%C3%A1!%20Gostaria%20de%20criar%20minha%20conta%20de%20veterin%C3%A1rio%20na%20VETRA." target="_blank" style="color:var(--green);font-weight:600;text-decoration:none">Solicite pelo WhatsApp →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ APP ════════════════ -->
+<div class="main-app" id="main-app">
+  <header class="topbar">
+    <div class="topbar-brand">
+      <svg class="topbar-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 25 L50 70 L52 70 L38 25 Z" fill="#4FA89C"/>
+        <path d="M70 20 L52 70 L62 70 L80 20 Z" fill="#0E3B3E"/>
+      </svg>
+      <span class="topbar-title">VETRA <span>DISTRIBUIDORA</span></span>
+    </div>
+    <div class="topbar-user">
+      <div style="text-align:right">
+        <div class="user-name" id="user-nome">—</div>
+        <div class="user-crmv" id="user-crmv">—</div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="vetLogout()">Sair</button>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="welcome-card">
+      <div class="welcome-title" id="welcome-title">Olá! 👋</div>
+      <div class="welcome-sub">Aqui estão as prescrições que você enviou para a VETRA.</div>
+      <div class="welcome-stats">
+        <div><div class="welcome-stat-num" id="stat-total">—</div><div class="welcome-stat-label">Total enviadas</div></div>
+        <div><div class="welcome-stat-num" id="stat-pendentes">—</div><div class="welcome-stat-label">Pendentes</div></div>
+        <div><div class="welcome-stat-num" id="stat-analisadas">—</div><div class="welcome-stat-label">Analisadas</div></div>
+      </div>
+    </div>
+
+    <div id="sem-vinculo-aviso" style="display:none" class="no-match-card">
+      <div style="font-size:2rem;margin-bottom:.5rem">🔍</div>
+      <strong>Não encontramos prescrições vinculadas ao seu CRMV ainda.</strong>
+      <p style="font-size:13px;color:var(--gray-dark);margin-top:.5rem">
+        Isso pode acontecer se as prescrições foram enviadas com um nome diferente do cadastrado,
+        ou se você ainda não enviou nenhuma pela VETRA. Envie sua primeira prescrição pelo site
+        ou fale com a gente pelo WhatsApp.
+      </p>
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-pill active" onclick="filtrarMinhasPresc('',this)">Todas</button>
+      <button class="filter-pill" onclick="filtrarMinhasPresc('pendente',this)">Pendentes</button>
+      <button class="filter-pill" onclick="filtrarMinhasPresc('analisado',this)">Analisadas</button>
+    </div>
+
+    <div class="section-title">📋 Minhas prescrições</div>
+    <div id="minhas-prescricoes"></div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://xiwkosnranwsudjkdlli.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhpd2tvc25yYW53c3VkamtkbGxpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5Nzc0NTQsImV4cCI6MjA5NjU1MzQ1NH0.72dWtHQZfaluwvvecsL_D6jFBY-Ah_x7KPTObaNRMec';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+let minhasPrescricoesAll = [];
+let filtroAtual = '';
+let vetAtual = null;
+
+/* ════════════ LOGIN ════════════ */
+async function vetLogin() {
+  const email = document.getElementById('vet-email-login').value.trim();
+  const senha = document.getElementById('vet-senha-login').value;
+  if (!email || !senha) { showLoginErr('Preencha e-mail e senha.'); return; }
+  const btn = document.getElementById('vet-login-btn');
+  btn.innerHTML = '<span class="spinner"></span> Entrando...'; btn.disabled = true;
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) throw error;
+    hideLogin();
+    await initVet(data.user);
+  } catch (e) {
+    showLoginErr('E-mail ou senha incorretos.');
+    btn.textContent = 'Entrar'; btn.disabled = false;
+  }
+}
+function showLoginErr(msg) { const el = document.getElementById('login-err'); el.textContent = msg; el.classList.add('show'); }
+function hideLogin() { document.getElementById('login-screen').classList.add('hidden'); document.getElementById('main-app').style.display = 'block'; }
+async function vetLogout() { await sb.auth.signOut(); location.reload(); }
+
+/* ════════════ CARREGA DADOS DO VETERINÁRIO LOGADO ════════════ */
+async function initVet(user) {
+  /* Busca o cadastro de veterinário vinculado a este e-mail de login */
+  const { data: vetData } = await sb.from('veterinarios').select('*').eq('email', user.email).maybeSingle();
+  vetAtual = vetData;
+
+  document.getElementById('user-nome').textContent = vetData?.nome || user.email;
+  document.getElementById('user-crmv').textContent = vetData?.crmv ? 'CRMV-MA ' + vetData.crmv : user.email;
+  document.getElementById('welcome-title').textContent = `Olá, ${(vetData?.nome || user.email).split(' ')[0]}! 👋`;
+
+  await carregarMinhasPrescricoes(user.email, vetData);
+}
+
+async function carregarMinhasPrescricoes(email, vetData) {
+  /* Estratégia: como o formulário público salva apenas nome em texto livre
+     (veterinario_nome), casamos por nome (e opcionalmente por CRMV se o nome
+     digitado incluir o CRMV). Também tentamos casar via veterinario_id quando
+     a prescrição foi vinculada por cadastro completo. */
+  const { data: todasPresc } = await sb.from('prescricoes')
+    .select('*, prescricao_medicamentos(*, medicamentos(nome, apresentacao))')
+    .order('criado_em', { ascending: false });
+
+  const nomeVet = (vetData?.nome || '').toLowerCase().trim();
+  const crmvVet = (vetData?.crmv || '').trim();
+
+  minhasPrescricoesAll = (todasPresc || []).filter(p => {
+    if (vetData && p.veterinario_id === vetData.id) return true;
+    const nomePresc = (p.veterinario_nome || '').toLowerCase();
+    if (nomeVet && nomePresc.includes(nomeVet)) return true;
+    if (crmvVet && nomePresc.includes(crmvVet.toLowerCase())) return true;
+    return false;
+  });
+
+  const total = minhasPrescricoesAll.length;
+  const pendentes = minhasPrescricoesAll.filter(p => p.status === 'pendente').length;
+  const analisadas = minhasPrescricoesAll.filter(p => p.status === 'analisado').length;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-pendentes').textContent = pendentes;
+  document.getElementById('stat-analisadas').textContent = analisadas;
+
+  document.getElementById('sem-vinculo-aviso').style.display = total === 0 ? 'block' : 'none';
+
+  renderMinhasPrescricoes();
+}
+
+function medNome(pm) {
+  if (pm.medicamentos?.nome) return pm.medicamentos.nome + (pm.medicamentos.apresentacao ? ' — '+pm.medicamentos.apresentacao : '');
+  return pm.nome_livre || 'Medicamento não informado';
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso); const now = new Date(); const diff = Math.floor((now - d) / 1000);
+  if (diff < 60) return 'agora mesmo';
+  if (diff < 3600) return `há ${Math.floor(diff/60)} min`;
+  if (diff < 86400) return `há ${Math.floor(diff/3600)}h`;
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
+function renderMinhasPrescricoes() {
+  let lista = minhasPrescricoesAll;
+  if (filtroAtual) lista = lista.filter(p => p.status === filtroAtual);
+
+  const container = document.getElementById('minhas-prescricoes');
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Nenhuma prescrição encontrada</div></div>`;
+    return;
+  }
+
+  container.innerHTML = lista.map(p => {
+    const meds = (p.prescricao_medicamentos || []);
+    const medPills = meds.map(m => `<span class="med-pill">${m.origem === 'ia' ? '🤖' : '💊'} ${medNome(m)}${m.dosagem ? ' — '+m.dosagem : ''}</span>`).join('');
+    const statusBadge = p.status === 'pendente'
+      ? '<span class="badge badge-orange">Pendente</span>'
+      : '<span class="badge badge-green">Analisada</span>';
+    return `
+      <div class="presc-card ${p.status}">
+        <div class="presc-header">
+          <span class="presc-from">${p.local_nome || '—'}</span>
+          ${statusBadge}
+          <span class="badge badge-blue">📍 ${p.bairro_nome || '—'}</span>
+        </div>
+        ${meds.length ? `<div class="presc-meds">${medPills}</div>` : '<div style="font-size:13px;color:var(--gray-mid);margin:8px 0">Enviada por foto — aguardando conferência</div>'}
+        <div class="presc-time">⏱ ${formatDate(p.criado_em)}</div>
+      </div>`;
+  }).join('');
+}
+
+function filtrarMinhasPresc(status, btn) {
+  filtroAtual = status;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  renderMinhasPrescricoes();
+}
+
+/* ════════════ VERIFICA SESSÃO ATIVA ════════════ */
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { hideLogin(); await initVet(session.user); }
+})();
+</script>
+</body>
+</html>

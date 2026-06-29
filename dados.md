@@ -104,8 +104,8 @@ do site público — é "secreta por obscuridade" + login obrigatório. Não há
 - CRUD completo: petshops, veterinários, medicamentos, bairros
 - Registro manual de prescrição pelo admin (telefone/WhatsApp/presencial)
 - Campo "analisado por" (rastreabilidade de quem no time analisou)
-- Análise automática de foto por IA (Groq Vision) quando não há medicamento digitado manualmente
-- Botão manual "Identificar medicamentos com IA" no modal de foto (pra fotos antigas ou retry)
+- Análise automática de foto por IA (Groq Vision) — **roda sempre que há foto**, mesmo que já existam medicamentos digitados manualmente, somando o total combinado (manual + IA) no aviso de sucesso
+- Botão manual "Identificar medicamentos com IA" no modal de foto — **só aparece se a prescrição ainda não tiver nenhum medicamento vinculado**; se já tiver (manual ou IA), o botão fica escondido e mostra uma mensagem confirmando o total já registrado, evitando duplicação no banco/rankings
 - Indicador visual 🤖 vs 💊 pra diferenciar medicamento extraído por IA vs digitado
 - Cache de imagem (Cache Storage API) pra economizar egress do Supabase Storage
 - Correção de segurança: views recriadas com `security_invoker` (linter do Supabase apontou `security_definer_view` e `auth_users_exposed` — corrigido)
@@ -113,25 +113,45 @@ do site público — é "secreta por obscuridade" + login obrigatório. Não há
 - **Veterinário "volante"**: campo `categoria` (fixo/volante) + tabela N:N `veterinario_locais` + modal com checklist de múltiplos petshops
 - **Importar/Exportar CSV** na aba Análise Detalhada (prescrições e ranking de medicamentos, com modelo de planilha pra download)
 - **Portal do veterinário (`vet.html`)**: login próprio, busca prescrições do vet logado por `veterinario_id` ou nome/CRMV em texto livre, mostra stats e lista filtrada
+- **Validação de campos numéricos**: telefone (index.html, gerencia.html) tem máscara em tempo real `(98) 9 0000-0000` que bloqueia letras e valida 10-11 dígitos no submit; CNPJ tem máscara `00.000.000/0000-00` e valida 14 dígitos; CRMV aceita só números (3-6 dígitos)
+- **4 gráficos de pizza** na Análise Detalhada: prescrições por bairro (top 8 + "Outros"), status (pendente/analisada), origem (público/admin), medicamentos por categoria do catálogo — todos com tooltip mostrando %, clicáveis quando aplicável (bairro e status filtram a lista de prescrições)
 
 ---
 
-## 6. Status da sessão atual
+## 6. Status da sessão atual (mais recente)
 
-✅ Rota `/vet` adicionada ao `netlify.toml` (+ `X-Robots-Tag: noindex` igual ao `/gerencia`)
-✅ `doLogin()` do `index.html` corrigido para redirecionar a `/vet` após login
-✅ Sintaxe JS de `index.html`, `gerencia.html` e `vet.html` validada com `node --check`
-✅ HTML balanceado (divs) validado nos 3 arquivos
-✅ Confirmado: nenhuma referência órfã a `vet-local` (select único antigo) sobrou em `gerencia.html` — migração para checklist múltiplo está completa
+✅ **2 mudanças implementadas nesta sessão:**
+
+1. **Modal de foto reestruturado para comparação lado a lado**: ao clicar em "Foto" numa prescrição, o modal agora mostra a imagem da receita à esquerda e, à direita, todos os dados já registrados no sistema (petshop, veterinário, bairro, status, lista de medicamentos com origem 🤖/💊, observações, data de recebimento). O admin consegue comparar visualmente a receita original com o que foi cadastrado, sem precisar abrir um segundo modal de detalhes.
+   - Criada função compartilhada `renderDadosPrescricao(p)` — usada tanto por `verDetalhes()` (modal antigo de detalhes) quanto pelo novo painel lado a lado em `verFoto()`, evitando duplicação de HTML
+   - Layout em grid 2 colunas (`.foto-compare-grid`), responsivo — empilha em coluna única em telas <760px
+   - Quando a IA identifica medicamentos com sucesso (botão manual), a coluna de dados se atualiza automaticamente sem precisar fechar/reabrir o modal
+   - Modal aumentado de `max-width:600px` para `max-width:1100px` para acomodar as duas colunas
+
+2. **Campo de busca removido do header** (estava sem função real — nunca filtrava nada na prática visível ao usuário):
+   - Removido o `<input id="search-input">` da topbar
+   - A funcionalidade de filtro por texto **continua existindo internamente** — é usada quando o admin clica num item de ranking/gráfico de petshop, veterinário ou medicamento (antes dependia do campo de busca visível, que foi substituído por uma variável de estado `currentTextFilter`)
+   - Adicionado um badge visual "🔗 Filtro: [valor] ×" na aba Prescrições que aparece **somente quando** esse filtro está ativo (por clique em gráfico/ranking), com botão para limpar — assim o filtro continua visível e controlável mesmo sem o input fixo no header
+   - Função `handleSearch()` foi removida; substituída por `aplicarFiltroTextoInterno()` e `limparFiltroTexto()`
+
+✅ Sintaxe JS revalidada com `node --check` após as mudanças
+✅ HTML balanceado (divs) revalidado via contagem programática (292 aberturas = 292 fechamentos)
+✅ Confirmado: nenhuma referência órfã a `search-input`/`handleSearch` restante no arquivo
 
 ### Pendente para o usuário executar
-1. Rodar `migracao_veterinario_volante.sql` no Supabase
-2. Rodar `correcao_seguranca_views.sql` no Supabase (se ainda não rodou)
-3. Testar o fluxo do veterinário ponta a ponta:
-   - Criar um usuário no Supabase Auth com e-mail X
-   - Cadastrar um veterinário em `/gerencia` com esse mesmo e-mail X
-   - Logar em `/vet` e confirmar que aparecem as prescrições certas
-4. Fazer commit + push pro GitHub pra disparar o deploy automático no Netlify
+1. Fazer commit + push pro GitHub pra disparar o deploy automático no Netlify
+2. Testar o modal de foto: clicar em "Foto" numa prescrição e confirmar que os dados aparecem corretamente ao lado da imagem
+3. Testar o fluxo de IA dentro do modal: clicar "Identificar com IA" numa prescrição sem medicamentos e confirmar que a coluna de dados atualiza sozinha
+4. Confirmar visualmente que o header não tem mais o campo de busca
+5. Testar o badge de filtro: clicar num item do gráfico/ranking (ex: um petshop) e confirmar que aparece o badge "🔗 Filtro: ..." na aba Prescrições, com botão de limpar funcionando
+
+---
+
+### Histórico — sessão anterior (resumo)
+
+✅ Bug de upload de foto PNG resolvido: bucket `prescricoes` tinha `allowed_mime_types` restringindo a tipos diferentes de PNG, causando erro "row-level security policy" enganoso. Corrigido com `correcao_png_rls.sql`.
+
+✅ 4 mudanças implementadas: (1) IA combinada com manual — roda sempre que há foto, soma total manual+IA; (2) botão "Identificar com IA" só aparece se a prescrição ainda não tem medicamentos vinculados; (3) validação de telefone/CNPJ/CRMV com máscara em tempo real; (4) 4 gráficos de pizza na Análise Detalhada (bairro, status, origem, categoria de medicamentos).
 
 ### Ideia futura (não pedida ainda)
 - Permitir o próprio veterinário logado em `/vet` enviar uma nova prescrição direto por ali, sem precisar ir no site público — hoje `/vet` é só visualização.
@@ -153,7 +173,8 @@ do site público — é "secreta por obscuridade" + login obrigatório. Não há
 
 - Deploy via **drag-and-drop não funciona pra Functions**. Sempre usar Git push ou `netlify deploy --prod` via CLI.
 - Foto em formato **HEIC** (câmera iPhone) não é decodificável pelo `<canvas>` do browser — `compressImage()` detecta a falha (`file._naoComprimido = true`), e o código valida o tamanho final antes do upload pra dar mensagem de erro clara em vez do erro genérico de RLS do Supabase Storage.
-- Bucket `prescricoes`: `file_size_limit` = 10MB, `public: false`. Política de **INSERT é pública** (qualquer um envia foto sem login), **SELECT é só autenticado** (só admin/vet logado vê).
+- Bucket `prescricoes`: `file_size_limit` = 10MB, `public: false`, `allowed_mime_types = null` (aceita qualquer tipo). Política de **INSERT é pública** (qualquer um envia foto sem login), **SELECT é só autenticado** (só admin/vet logado vê).
+- ⚠️ **Já aconteceu**: o bucket tinha `allowed_mime_types` restrito (provavelmente só `image/jpeg`) e rejeitava PNG — o Supabase mostra esse bloqueio como erro genérico de "row-level security policy", o que confunde o diagnóstico porque parece ser problema de RLS quando na verdade é MIME type. Sinal de alerta: se a foto era print de tela (PNG) e deu esse erro, checar `allowed_mime_types` do bucket primeiro, antes de revisar políticas RLS.
 - Cache de HTML no browser/Netlify já causou um "bug fantasma" — resolvido com `Cache-Control: no-cache, must-revalidate` pra `/*.html`.
 - Netlify free tier: variável "Secret" funciona normal no free. "Specific scopes" (Builds/Functions/Runtime) já resolve sem precisar de "All scopes" nem upgrade pago.
 - Consumo de créditos Netlify pela Function de IA é desprezível (<0.5% dos 300 créditos/mês grátis) mesmo em volume alto (300 prescrições/mês com foto).
@@ -178,6 +199,7 @@ do site público — é "secreta por obscuridade" + login obrigatório. Não há
 ├── seed_dados_ficticios.sql            → dados de teste (10 prescrições fictícias)
 ├── diagnostico_rls_storage.sql         → queries de debug pra RLS do storage
 ├── diagnostico_rls_storage_2.sql       → queries de debug pra file_size_limit/mime
+├── correcao_png_rls.sql                → fix definitivo: remove allowed_mime_types do bucket
 ├── DEPLOY_COM_CLI.md                   → guia de deploy via Netlify CLI
 ├── README.md                           → documentação geral + setup Groq
 └── dados.md                            → este arquivo (memória do projeto)

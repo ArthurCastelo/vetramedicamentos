@@ -134,6 +134,21 @@
     .modal-close { position:absolute; top:12px; right:12px; background:var(--gray-pale); border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; color:var(--gray-mid); }
     .modal-title { font-family:'Sora',sans-serif; font-size:1.1rem; font-weight:700; margin-bottom:1.25rem; }
     .foto-preview { width:100%; border-radius:10px; max-height:360px; object-fit:contain; background:var(--gray-pale); }
+    .foto-compare-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; align-items:start; }
+    .foto-compare-col { display:flex; flex-direction:column; }
+    .foto-compare-dados { background:var(--gray-pale); border-radius:12px; padding:1.25rem; max-height:480px; overflow-y:auto; }
+    .foto-compare-label { font-size:11px; font-weight:700; color:var(--gray-mid); text-transform:uppercase; letter-spacing:.05em; margin-bottom:.75rem; }
+    .fdp-field { margin-bottom:14px; }
+    .fdp-field-label { font-size:11px; font-weight:700; color:var(--gray-mid); text-transform:uppercase; margin-bottom:4px; }
+    .fdp-field-value { font-size:14px; color:var(--charcoal); font-weight:600; }
+    .fdp-meds-list { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+    .fdp-med-item { background:var(--white); border:1px solid var(--border-col); border-radius:8px; padding:8px 12px; font-size:13px; }
+    .fdp-med-item .fdp-med-nome { font-weight:600; }
+    .fdp-med-item .fdp-med-dose { color:var(--gray-mid); font-size:12px; margin-top:2px; }
+    @media(max-width:760px) {
+      .foto-compare-grid { grid-template-columns:1fr; }
+      .foto-compare-dados { max-height:none; }
+    }
     .of-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
     .filter-bar { display:flex; gap:8px; margin-bottom:1.25rem; flex-wrap:wrap; align-items:center; }
@@ -240,7 +255,6 @@
   <header class="topbar">
     <div class="topbar-title" id="topbar-title">Dashboard</div>
     <div class="topbar-right">
-      <div class="search-box"><span style="font-size:14px;color:var(--gray-mid)">🔍</span><input type="text" placeholder="Buscar..." id="search-input" oninput="handleSearch(this.value)" /></div>
       <button class="btn btn-primary btn-sm" onclick="openPrescManual()">+ Registrar Prescrição</button>
     </div>
   </header>
@@ -296,6 +310,10 @@
         <select class="form-select" style="width:auto;padding:6px 12px;font-size:13px" onchange="filterBairro(this.value)" id="bairro-filter">
           <option value="">Todos os bairros</option>
         </select>
+        <span id="texto-filtro-ativo" style="display:none;align-items:center;gap:6px;font-size:13px;color:var(--green-mid);background:var(--green-pale);padding:6px 12px;border-radius:20px">
+          🔗 Filtro: <strong id="texto-filtro-valor"></strong>
+          <button onclick="limparFiltroTexto()" style="background:none;border:none;cursor:pointer;color:var(--green-mid);font-weight:700;font-size:14px;padding:0 0 0 4px" title="Limpar filtro">×</button>
+        </span>
       </div>
       <div id="presc-list"></div>
     </div>
@@ -416,15 +434,23 @@
 
 <!-- ════════ MODAL FOTO ════════ -->
 <div class="modal-overlay" id="modal-foto">
-  <div class="modal" style="max-width:600px">
+  <div class="modal" style="max-width:1100px">
     <button class="modal-close" onclick="closeFoto()">×</button>
     <div class="modal-title">📷 Foto da Prescrição</div>
-    <img id="foto-img" class="foto-preview" src="" alt="Foto da prescrição" />
-    <p id="foto-loading" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando imagem...</p>
-    <button class="btn btn-primary" id="btn-analisar-ia" style="width:100%;justify-content:center;margin-top:1rem" onclick="analisarFotoComIA()">
-      🤖 Identificar medicamentos com IA
-    </button>
-    <p id="ia-status" style="font-size:13px;color:var(--gray-mid);text-align:center;margin-top:8px"></p>
+    <div class="foto-compare-grid">
+      <div class="foto-compare-col">
+        <img id="foto-img" class="foto-preview" src="" alt="Foto da prescrição" />
+        <p id="foto-loading" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando imagem...</p>
+        <button class="btn btn-primary" id="btn-analisar-ia" style="width:100%;justify-content:center;margin-top:1rem" onclick="analisarFotoComIA()">
+          🤖 Identificar medicamentos com IA
+        </button>
+        <p id="ia-status" style="font-size:13px;color:var(--gray-mid);text-align:center;margin-top:8px"></p>
+      </div>
+      <div class="foto-compare-col foto-compare-dados">
+        <div class="foto-compare-label">📋 Dados registrados no sistema</div>
+        <div id="foto-dados-prescricao"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -819,6 +845,14 @@ function renderPresc() {
   let list = allPrescricoes;
   if (currentStatusFilter) list = list.filter(p => p.status === currentStatusFilter);
   if (currentBairroFilter) list = list.filter(p => p.bairro_nome === currentBairroFilter);
+  if (currentTextFilter) {
+    list = list.filter(p => {
+      const meds = (p.prescricao_medicamentos || []).map(m => medNome(m).toLowerCase()).join(' ');
+      return (p.local_nome||'').toLowerCase().includes(currentTextFilter)
+        || (p.veterinario_nome||'').toLowerCase().includes(currentTextFilter)
+        || meds.includes(currentTextFilter);
+    });
+  }
   const container = document.getElementById('presc-list');
   if (!list.length) { container.innerHTML = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">Nenhuma prescrição encontrada</div></div>`; return; }
   container.innerHTML = list.map(p => prescCard(p)).join('');
@@ -874,11 +908,28 @@ async function marcarAnalisado(id) {
 }
 function filterStatus(s, btn) { currentStatusFilter = s; document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active')); btn.classList.add('active'); renderPresc(); }
 function filterBairro(v) { currentBairroFilter = v; renderPresc(); }
-function handleSearch(q) {
-  if (!q) { renderPresc(); return; }
-  const ql = q.toLowerCase();
-  const filtered = allPrescricoes.filter(p => (p.local_nome||'').toLowerCase().includes(ql) || (p.veterinario_nome||'').toLowerCase().includes(ql) || (p.bairro_nome||'').toLowerCase().includes(ql));
-  document.getElementById('presc-list').innerHTML = filtered.map(p => prescCard(p)).join('');
+
+/* Filtro textual interno (sem campo de busca visível) — usado quando o admin
+   clica num item de ranking/gráfico de petshop, veterinário ou medicamento */
+let currentTextFilter = '';
+let currentTextFilterLabel = '';
+function aplicarFiltroTextoInterno(valor) {
+  currentTextFilter = (valor || '').toLowerCase();
+  currentTextFilterLabel = valor || '';
+  const badge = document.getElementById('texto-filtro-ativo');
+  if (currentTextFilter) {
+    badge.style.display = 'inline-flex';
+    document.getElementById('texto-filtro-valor').textContent = currentTextFilterLabel;
+  } else {
+    badge.style.display = 'none';
+  }
+  renderPresc();
+}
+function limparFiltroTexto() {
+  currentTextFilter = '';
+  currentTextFilterLabel = '';
+  document.getElementById('texto-filtro-ativo').style.display = 'none';
+  renderPresc();
 }
 
 const signedUrlCache = {};
@@ -891,10 +942,15 @@ async function verFoto(fotoUrl, prescricaoId) {
   document.getElementById('ia-status').textContent = '';
   fotoModalContext = { prescricaoId, fotoUrl, signedUrl: null };
 
+  /* Popula a coluna de dados ao lado da foto, para comparação lado a lado */
+  const prescAtual = allPrescricoes.find(p => p.id === prescricaoId);
+  document.getElementById('foto-dados-prescricao').innerHTML = prescAtual
+    ? renderDadosPrescricao(prescAtual)
+    : '<p style="color:var(--gray-mid);font-size:13px">Dados da prescrição não encontrados.</p>';
+
   /* Esconde o botão de IA se a prescrição já tem medicamentos vinculados
      (manuais ou de IA) — evita duplicação no banco e no ranking */
   const btnIA = document.getElementById('btn-analisar-ia');
-  const prescAtual = allPrescricoes.find(p => p.id === prescricaoId);
   const jaTemMedicamentos = prescAtual && (prescAtual.prescricao_medicamentos || []).length > 0;
   if (jaTemMedicamentos) {
     btnIA.style.display = 'none';
@@ -990,6 +1046,12 @@ async function analisarFotoComIA() {
       status.textContent = `✅ ${result.medicamentosSalvos} medicamento(s) identificado(s) e adicionado(s) à prescrição!`;
       status.style.color = 'var(--green-mid)';
       await loadPrescricoes();
+      /* Atualiza a coluna de dados ao lado da foto com os medicamentos recém-identificados */
+      const prescAtualizada = allPrescricoes.find(p => p.id === prescricaoId);
+      if (prescAtualizada) {
+        document.getElementById('foto-dados-prescricao').innerHTML = renderDadosPrescricao(prescAtualizada);
+        btn.style.display = 'none'; // já tem medicamentos agora, evita reprocessar
+      }
     } else {
       status.textContent = result.aviso || 'Nenhum medicamento identificado nesta imagem.';
       status.style.color = 'var(--gray-mid)';
@@ -1004,25 +1066,38 @@ async function analisarFotoComIA() {
   }
 }
 
-function verDetalhes(id) {
-  const p = allPrescricoes.find(x => x.id === id);
-  if (!p) return;
+/* Renderiza os dados completos de uma prescrição — usado no modal de detalhes
+   e também na comparação lado a lado com a foto */
+function renderDadosPrescricao(p) {
   const meds = (p.prescricao_medicamentos || []);
   const obs = (p.observacoes || '').replace(/\n/g,'<br>');
   const analiseInfo = (p.status === 'analisado')
-    ? `<div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Analisado por</span><div style="margin-top:4px;font-size:13px;color:var(--green-mid);font-weight:600">${p.analisado_por_email ? '✓ '+p.analisado_por_email.split('@')[0] : '✓ Admin'}${p.analisado_em ? ' — '+formatDate(p.analisado_em) : ''}</div></div>`
+    ? `<div class="fdp-field"><div class="fdp-field-label">Analisado por</div><div style="font-size:13px;color:var(--green-mid);font-weight:600">${p.analisado_por_email ? '✓ '+p.analisado_por_email.split('@')[0] : '✓ Admin'}${p.analisado_em ? ' — '+formatDate(p.analisado_em) : ''}</div></div>`
     : '';
-  document.getElementById('det-body').innerHTML = `
-    <div style="display:grid;gap:12px">
-      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Petshop</span><div style="font-weight:600;margin-top:4px">${p.local_nome || '—'}</div></div>
-      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Veterinário</span><div style="font-weight:600;margin-top:4px">${p.veterinario_nome || '—'}</div></div>
-      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Bairro</span><div style="margin-top:4px">${p.bairro_nome || '—'}</div></div>
-      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Status</span><div style="margin-top:4px">${p.status}</div></div>
-      ${analiseInfo}
-      ${meds.length ? `<div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Medicamentos</span><div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">${meds.map(m=>`<span class="med-pill">${m.origem === 'ia' ? '🤖' : '💊'} ${medNome(m)}${m.dosagem?' — '+m.dosagem:''}</span>`).join('')}</div></div>` : ''}
-      ${obs ? `<div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Observações</span><div style="margin-top:4px;font-size:13px;color:var(--gray-dark)">${obs}</div></div>` : ''}
-      <div><span style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Recebido em</span><div style="margin-top:4px;font-size:13px">${formatDate(p.criado_em)}</div></div>
-    </div>`;
+  return `
+    <div class="fdp-field"><div class="fdp-field-label">Petshop</div><div class="fdp-field-value">${p.local_nome || '—'}</div></div>
+    <div class="fdp-field"><div class="fdp-field-label">Veterinário</div><div class="fdp-field-value">${p.veterinario_nome || '—'}</div></div>
+    <div class="fdp-field"><div class="fdp-field-label">Bairro</div><div class="fdp-field-value">${p.bairro_nome || '—'}</div></div>
+    <div class="fdp-field"><div class="fdp-field-label">Status</div><div class="fdp-field-value">${p.status === 'pendente' ? '⏳ Pendente' : '✅ Analisada'}</div></div>
+    ${analiseInfo}
+    <div class="fdp-field">
+      <div class="fdp-field-label">Medicamentos registrados (${meds.length})</div>
+      ${meds.length ? `<div class="fdp-meds-list">${meds.map(m => `
+        <div class="fdp-med-item">
+          <div class="fdp-med-nome">${m.origem === 'ia' ? '🤖' : '💊'} ${medNome(m)}</div>
+          ${m.dosagem ? `<div class="fdp-med-dose">${m.dosagem}</div>` : ''}
+        </div>`).join('')}</div>`
+      : '<div style="font-size:13px;color:var(--orange);margin-top:6px">⚠️ Nenhum medicamento registrado ainda</div>'}
+    </div>
+    ${obs ? `<div class="fdp-field"><div class="fdp-field-label">Observações</div><div style="font-size:13px;color:var(--gray-dark)">${obs}</div></div>` : ''}
+    <div class="fdp-field"><div class="fdp-field-label">Recebido em</div><div style="font-size:13px">${formatDate(p.criado_em)}</div></div>
+  `;
+}
+
+function verDetalhes(id) {
+  const p = allPrescricoes.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('det-body').innerHTML = `<div style="display:grid;gap:12px">${renderDadosPrescricao(p)}</div>`;
   document.getElementById('modal-det').classList.add('open');
 }
 
@@ -1110,12 +1185,14 @@ function chartBaseOptions(extra) {
 /* Navega para a lista de prescrições já filtrada pelo item clicado no gráfico */
 function goToFilteredPrescricoes(tipo, valor) {
   showPanel('prescricoes', document.querySelector('[onclick*="\'prescricoes\'"]'));
+  currentTextFilter = '';
   if (tipo === 'bairro') {
     document.getElementById('bairro-filter').value = valor;
     filterBairro(valor);
   } else {
-    document.getElementById('search-input').value = valor;
-    handleSearch(valor);
+    currentBairroFilter = '';
+    document.getElementById('bairro-filter').value = '';
+    aplicarFiltroTextoInterno(valor);
   }
   showToast(`🔗 Filtrando por: ${valor}`);
 }

@@ -331,6 +331,28 @@
         <div class="card-header"><div class="card-title">📈 Petshops com mais prescrições</div></div>
         <div class="card-body-pad"><div style="position:relative;height:340px"><canvas id="chart-petshops" role="img" aria-label="Gráfico de barras de petshops com mais prescrições">Gráfico de petshops</canvas></div></div>
       </div>
+
+      <div style="margin:2rem 0 1rem"><div class="card-title" style="font-size:1.05rem">🥧 Distribuição em gráficos de pizza</div></div>
+      <div class="dash-grid-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Prescrições por bairro (proporção)</div></div>
+          <div class="card-body-pad"><div style="position:relative;height:320px"><canvas id="chart-pizza-bairros" role="img" aria-label="Gráfico de pizza de prescrições por bairro">Gráfico de pizza por bairro</canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Status das prescrições</div></div>
+          <div class="card-body-pad"><div style="position:relative;height:320px"><canvas id="chart-pizza-status" role="img" aria-label="Gráfico de pizza de status das prescrições">Gráfico de pizza de status</canvas></div></div>
+        </div>
+      </div>
+      <div class="dash-grid-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Origem das prescrições</div></div>
+          <div class="card-body-pad"><div style="position:relative;height:320px"><canvas id="chart-pizza-origem" role="img" aria-label="Gráfico de pizza de origem das prescrições">Gráfico de pizza de origem</canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Medicamentos por categoria</div></div>
+          <div class="card-body-pad"><div style="position:relative;height:320px"><canvas id="chart-pizza-categoria" role="img" aria-label="Gráfico de pizza de categorias de medicamentos">Gráfico de pizza de categorias</canvas></div></div>
+        </div>
+      </div>
     </div>
 
     <!-- ══ VETERINÁRIOS ══ -->
@@ -465,8 +487,8 @@
     <input type="hidden" id="loc-id" />
     <div class="form-group"><label class="form-label">Nome do estabelecimento *</label><input class="form-input" type="text" id="loc-nome" placeholder="Ex: PetCenter São Luís" /></div>
     <div class="of-grid">
-      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" type="text" id="loc-tel" placeholder="(98) 9 0000-0000" /></div>
-      <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" type="text" id="loc-cnpj" placeholder="00.000.000/0000-00" /></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" type="tel" id="loc-tel" placeholder="(98) 9 0000-0000" inputmode="numeric" maxlength="16" oninput="mascaraTelefone(this)" /></div>
+      <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" type="text" id="loc-cnpj" placeholder="00.000.000/0000-00" inputmode="numeric" maxlength="18" oninput="mascaraCNPJ(this)" /></div>
     </div>
     <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="loc-email" placeholder="contato@petshop.com" /></div>
     <div class="form-group"><label class="form-label">Endereço</label><input class="form-input" type="text" id="loc-endereco" placeholder="Rua, número, bairro" /></div>
@@ -486,8 +508,8 @@
     <input type="hidden" id="vet-id" />
     <div class="form-group"><label class="form-label">Nome completo *</label><input class="form-input" type="text" id="vet-nome" placeholder="Dr(a). Nome Sobrenome" /></div>
     <div class="of-grid">
-      <div class="form-group"><label class="form-label">CRMV-MA *</label><input class="form-input" type="text" id="vet-crmv" placeholder="00000" /></div>
-      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" type="text" id="vet-tel" placeholder="(98) 9 0000-0000" /></div>
+      <div class="form-group"><label class="form-label">CRMV-MA *</label><input class="form-input" type="text" id="vet-crmv" placeholder="00000" inputmode="numeric" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')" /></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" type="tel" id="vet-tel" placeholder="(98) 9 0000-0000" inputmode="numeric" maxlength="16" oninput="mascaraTelefone(this)" /></div>
     </div>
     <div class="form-group"><label class="form-label">E-mail *</label><input class="form-input" type="email" id="vet-email" placeholder="vet@email.com" /></div>
     <div class="form-group"><label class="form-label">Especialidade</label><input class="form-input" type="text" id="vet-esp" placeholder="Ex: Clínica Geral, Dermatologia..." /></div>
@@ -549,6 +571,38 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ════════════ MÁSCARAS E VALIDAÇÃO DE CAMPOS NUMÉRICOS ════════════ */
+function mascaraTelefone(input) {
+  let v = input.value.replace(/\D/g, '').slice(0, 11);
+  if (v.length > 10) v = v.replace(/(\d{2})(\d{1})(\d{4})(\d{4})/, '($1) $2 $3-$4');
+  else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+  else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+  else if (v.length > 0) v = v.replace(/(\d{0,2})/, '($1');
+  input.value = v;
+}
+function telefoneValido(valor) {
+  if (!valor) return true; // telefone é opcional nos cadastros do admin
+  const digitos = valor.replace(/\D/g, '');
+  return digitos.length === 10 || digitos.length === 11;
+}
+function mascaraCNPJ(input) {
+  let v = input.value.replace(/\D/g, '').slice(0, 14);
+  v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+  v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+  v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+  v = v.replace(/(\d{4})(\d)/, '$1-$2');
+  input.value = v;
+}
+function cnpjValido(valor) {
+  if (!valor) return true; // CNPJ é opcional
+  const digitos = valor.replace(/\D/g, '');
+  return digitos.length === 14;
+}
+function crmvValido(valor) {
+  const digitos = (valor || '').replace(/\D/g, '');
+  return digitos.length >= 3 && digitos.length <= 6;
+}
+
 const SB_URL = 'https://xiwkosnranwsudjkdlli.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhpd2tvc25yYW53c3VkamtkbGxpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5Nzc0NTQsImV4cCI6MjA5NjU1MzQ1NH0.72dWtHQZfaluwvvecsL_D6jFBY-Ah_x7KPTObaNRMec';
 const sb = supabase.createClient(SB_URL, SB_KEY);
@@ -556,6 +610,7 @@ const sb = supabase.createClient(SB_URL, SB_KEY);
 let allPrescricoes = [], allLocais = [], allVets = [], allBairros = [], allMedicamentos = [];
 let currentStatusFilter = '', currentBairroFilter = '';
 let chartBairros, chartMedicamentos, chartPetshops;
+let chartPizzaBairros, chartPizzaStatus, chartPizzaOrigem, chartPizzaCategoria;
 let currentUser = null; // usuário admin logado — usado para registrar "analisado por"
 
 /* ════════════ AUTENTICAÇÃO ════════════ */
@@ -724,7 +779,7 @@ async function excluirMed() {
 /* ════════════ PRESCRIÇÕES ════════════ */
 async function loadPrescricoes() {
   const { data, error } = await sb.from('prescricoes')
-    .select('*, prescricao_medicamentos(*, medicamentos(nome, apresentacao))')
+    .select('*, prescricao_medicamentos(*, medicamentos(nome, apresentacao, categoria))')
     .order('criado_em', { ascending: false });
   if (error) { console.error(error); return; }
   allPrescricoes = data || [];
@@ -835,6 +890,19 @@ async function verFoto(fotoUrl, prescricaoId) {
   document.getElementById('foto-loading').style.display = 'block';
   document.getElementById('ia-status').textContent = '';
   fotoModalContext = { prescricaoId, fotoUrl, signedUrl: null };
+
+  /* Esconde o botão de IA se a prescrição já tem medicamentos vinculados
+     (manuais ou de IA) — evita duplicação no banco e no ranking */
+  const btnIA = document.getElementById('btn-analisar-ia');
+  const prescAtual = allPrescricoes.find(p => p.id === prescricaoId);
+  const jaTemMedicamentos = prescAtual && (prescAtual.prescricao_medicamentos || []).length > 0;
+  if (jaTemMedicamentos) {
+    btnIA.style.display = 'none';
+    document.getElementById('ia-status').innerHTML = `✅ Esta prescrição já possui ${prescAtual.prescricao_medicamentos.length} medicamento(s) registrado(s) — análise por IA não é necessária.`;
+    document.getElementById('ia-status').style.color = 'var(--green-mid)';
+  } else {
+    btnIA.style.display = 'block';
+  }
 
   const cleanPath = fotoUrl.replace('prescricoes/','');
 
@@ -1270,6 +1338,94 @@ function renderCharts() {
       onClick: (evt, elements) => { if (elements.length) goToFilteredPrescricoes('petshop', rPetshops[elements[0].index][0]); }
     })
   });
+
+  /* ── GRÁFICOS DE PIZZA ── */
+  const pieColors = ['#0E3B3E', '#4FA89C', '#E8630A', '#F2934C', '#1B5E5E', '#6B21A8', '#1A6BBD', '#C8D2D1', '#7A8786', '#FFB347'];
+
+  function pieBaseOptions(clickHandler) {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
+      onClick: clickHandler,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: "'DM Sans', sans-serif", size: 12 }, padding: 12, boxWidth: 12 } },
+        tooltip: {
+          backgroundColor: '#0E3B3E', titleColor: '#FFFFFF', bodyColor: '#EAF2F1',
+          padding: 12, cornerRadius: 8,
+          callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.parsed} (${((ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)` }
+        }
+      }
+    };
+  }
+
+  if (chartPizzaBairros) chartPizzaBairros.destroy();
+  if (chartPizzaStatus) chartPizzaStatus.destroy();
+  if (chartPizzaOrigem) chartPizzaOrigem.destroy();
+  if (chartPizzaCategoria) chartPizzaCategoria.destroy();
+
+  // 1. Pizza — Prescrições por bairro (top 8 + "Outros")
+  const rBairrosTodos = buildRanking(allPrescricoes, p => p.bairro_nome);
+  const top8Bairros = rBairrosTodos.slice(0, 8);
+  const restoBairros = rBairrosTodos.slice(8).reduce((sum, r) => sum + r[1], 0);
+  const labelsBairrosPizza = top8Bairros.map(r => r[0]).concat(restoBairros > 0 ? ['Outros'] : []);
+  const dataBairrosPizza = top8Bairros.map(r => r[1]).concat(restoBairros > 0 ? [restoBairros] : []);
+
+  chartPizzaBairros = new Chart(document.getElementById('chart-pizza-bairros'), {
+    type: 'pie',
+    data: { labels: labelsBairrosPizza, datasets: [{ data: dataBairrosPizza, backgroundColor: pieColors, borderWidth: 2, borderColor: '#FFFFFF' }] },
+    options: pieBaseOptions((evt, elements) => {
+      if (elements.length && labelsBairrosPizza[elements[0].index] !== 'Outros') {
+        goToFilteredPrescricoes('bairro', labelsBairrosPizza[elements[0].index]);
+      }
+    })
+  });
+
+  // 2. Pizza — Status (pendente vs analisado)
+  const totalPendente = allPrescricoes.filter(p => p.status === 'pendente').length;
+  const totalAnalisado = allPrescricoes.filter(p => p.status === 'analisado').length;
+  chartPizzaStatus = new Chart(document.getElementById('chart-pizza-status'), {
+    type: 'pie',
+    data: {
+      labels: ['Pendente', 'Analisada'],
+      datasets: [{ data: [totalPendente, totalAnalisado], backgroundColor: ['#E8630A', '#1B5E5E'], borderWidth: 2, borderColor: '#FFFFFF' }]
+    },
+    options: pieBaseOptions((evt, elements) => {
+      if (elements.length) {
+        const status = elements[0].index === 0 ? 'pendente' : 'analisado';
+        showPanel('prescricoes', document.querySelector('[onclick*="\'prescricoes\'"]'));
+        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        const btn = [...document.querySelectorAll('#panel-prescricoes .filter-pill')].find(b => b.textContent.toLowerCase().includes(status === 'pendente' ? 'pendente' : 'analisada'));
+        if (btn) { btn.classList.add('active'); filterStatus(status, btn); }
+      }
+    })
+  });
+
+  // 3. Pizza — Origem (público vs admin)
+  const totalPublico = allPrescricoes.filter(p => p.origem === 'publico').length;
+  const totalAdmin = allPrescricoes.filter(p => p.origem === 'admin').length;
+  chartPizzaOrigem = new Chart(document.getElementById('chart-pizza-origem'), {
+    type: 'pie',
+    data: {
+      labels: ['Formulário público', 'Registrada pelo admin'],
+      datasets: [{ data: [totalPublico, totalAdmin], backgroundColor: ['#4FA89C', '#6B21A8'], borderWidth: 2, borderColor: '#FFFFFF' }]
+    },
+    options: pieBaseOptions(() => {})
+  });
+
+  // 4. Pizza — Medicamentos por categoria do catálogo
+  const categoriasCount = {};
+  allMeds.forEach(m => {
+    const cat = m.medicamentos?.categoria || 'Sem categoria';
+    categoriasCount[cat] = (categoriasCount[cat] || 0) + 1;
+  });
+  const labelsCategorias = Object.keys(categoriasCount);
+  const dataCategorias = Object.values(categoriasCount);
+  chartPizzaCategoria = new Chart(document.getElementById('chart-pizza-categoria'), {
+    type: 'pie',
+    data: { labels: labelsCategorias, datasets: [{ data: dataCategorias, backgroundColor: pieColors, borderWidth: 2, borderColor: '#FFFFFF' }] },
+    options: pieBaseOptions(() => {})
+  });
 }
 
 /* ════════════ VETERINÁRIOS (CRUD) ════════════ */
@@ -1366,9 +1522,12 @@ async function salvarVet() {
   const nome = document.getElementById('vet-nome').value.trim();
   const crmv = document.getElementById('vet-crmv').value.trim();
   const email = document.getElementById('vet-email').value.trim();
+  const telefone = document.getElementById('vet-tel').value.trim();
   const bairro_id = document.getElementById('vet-bairro').value;
   const categoria = document.getElementById('modal-vet').dataset.categoria || 'fixo';
   if (!nome || !crmv || !email || !bairro_id) { showToast('Preencha nome, CRMV, e-mail e bairro.'); return; }
+  if (!crmvValido(crmv)) { showToast('CRMV inválido — deve conter apenas números (3 a 6 dígitos).'); return; }
+  if (!telefoneValido(telefone)) { showToast('Telefone inválido. Use o formato (98) 9 0000-0000 com DDD.'); return; }
   if (categoria === 'fixo' && vetLocaisSelecionados.length > 1) {
     showToast('Veterinário "Fixo" pode ter no máximo 1 petshop. Marque como "Volante" para múltiplos vínculos.');
     return;
@@ -1469,8 +1628,12 @@ async function salvarLocal() {
   const id = document.getElementById('loc-id').value;
   const nome = document.getElementById('loc-nome').value.trim();
   const bairro_id = document.getElementById('loc-bairro').value;
+  const telefone = document.getElementById('loc-tel').value.trim();
+  const cnpj = document.getElementById('loc-cnpj').value.trim();
   if (!nome || !bairro_id) { showToast('Preencha nome e bairro.'); return; }
-  const payload = { nome, telefone: document.getElementById('loc-tel').value.trim(), cnpj: document.getElementById('loc-cnpj').value.trim(), email: document.getElementById('loc-email').value.trim(), endereco: document.getElementById('loc-endereco').value.trim(), bairro_id, ativo: document.getElementById('loc-ativo').checked };
+  if (!telefoneValido(telefone)) { showToast('Telefone inválido. Use o formato (98) 9 0000-0000 com DDD.'); return; }
+  if (!cnpjValido(cnpj)) { showToast('CNPJ inválido — deve conter 14 números no formato 00.000.000/0000-00.'); return; }
+  const payload = { nome, telefone, cnpj, email: document.getElementById('loc-email').value.trim(), endereco: document.getElementById('loc-endereco').value.trim(), bairro_id, ativo: document.getElementById('loc-ativo').checked };
   let error;
   if (id) ({ error } = await sb.from('locais').update(payload).eq('id', id));
   else ({ error } = await sb.from('locais').insert(payload));

@@ -302,7 +302,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Telefone para contato *</label>
-            <input class="form-input" type="tel" id="f-tel" placeholder="(98) 9 0000-0000" required />
+            <input class="form-input" type="tel" id="f-tel" placeholder="(98) 9 0000-0000" inputmode="numeric" maxlength="16" oninput="mascaraTelefone(this)" required />
           </div>
           <div class="form-group">
             <label class="form-label">Bairro *</label>
@@ -538,6 +538,20 @@
   }
 
   /* ── Converte File em base64 puro (sem o prefixo data:...) para enviar à function de IA ── */
+  /* ── Máscara e validação de telefone (BR): bloqueia letras, formata em tempo real ── */
+  function mascaraTelefone(input) {
+    let v = input.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 10) v = v.replace(/(\d{2})(\d{1})(\d{4})(\d{4})/, '($1) $2 $3-$4');
+    else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+    else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+    else if (v.length > 0) v = v.replace(/(\d{0,2})/, '($1');
+    input.value = v;
+  }
+  function telefoneValido(valor) {
+    const digitos = (valor || '').replace(/\D/g, '');
+    return digitos.length === 10 || digitos.length === 11;
+  }
+
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -571,6 +585,14 @@
   /* ── SUBMIT PRESCRIÇÃO ── */
   async function submitPrescricao(e) {
     e.preventDefault();
+
+    const telInput = document.getElementById('f-tel');
+    if (!telefoneValido(telInput.value)) {
+      showToast('❌ Telefone inválido. Use o formato (98) 9 0000-0000 com DDD.');
+      telInput.focus();
+      return;
+    }
+
     const btn = document.getElementById('submit-btn');
     btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-radius:50%;border-top-color:white;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>Enviando...';
     btn.disabled = true;
@@ -648,9 +670,10 @@
         }
       }
 
-      /* Análise automática por IA — só roda se a foto foi enviada e nenhum medicamento foi digitado manualmente */
+      /* Análise automática por IA — roda sempre que há foto, mesmo com medicamentos
+         digitados manualmente, para o total final já vir combinado (manual + IA) */
       let avisoIA = '';
-      if (fotoEnviada && meds.length === 0 && compressedFileForAI) {
+      if (fotoEnviada && compressedFileForAI) {
         try {
           const base64 = await fileToBase64(compressedFileForAI);
           const resp = await fetch('/.netlify/functions/analisar-foto', {
@@ -660,8 +683,11 @@
           });
           const result = await resp.json();
           if (resp.ok && result.medicamentosSalvos > 0) {
-            avisoIA = ` 🤖 Identificamos ${result.medicamentosSalvos} medicamento(s) na foto automaticamente.`;
-          } else if (result.legivel === false) {
+            const totalCombinado = meds.length + result.medicamentosSalvos;
+            avisoIA = meds.length > 0
+              ? ` 🤖 Identificamos mais ${result.medicamentosSalvos} medicamento(s) na foto — total de ${totalCombinado} registrados.`
+              : ` 🤖 Identificamos ${result.medicamentosSalvos} medicamento(s) na foto automaticamente.`;
+          } else if (result.legivel === false && meds.length === 0) {
             avisoIA = ' Não conseguimos ler os medicamentos na foto automaticamente — nossa equipe vai conferir manualmente.';
           }
         } catch (iaErr) {

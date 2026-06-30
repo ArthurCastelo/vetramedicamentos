@@ -38,6 +38,8 @@ distribuidora (que analisa e atende com produtos).
 - **Frontend**: HTML/CSS/JS puro (sem framework), 3 páginas principais
 - **Backend**: Supabase (Postgres + Auth + Storage)
 - **IA de visão**: Groq (`meta-llama/llama-4-scout-17b-16e-instruct`) via Netlify Function
+- **Gráficos**: Chart.js 4.4.1 (via CDN) — usado em `gerencia.html`
+- **Exportação**: SheetJS/`xlsx` (Excel) + jsPDF + jspdf-autotable (PDF) — ambos via CDN, só em `gerencia.html`, só exportação (sem importação)
 - **Hospedagem**: Netlify, deploy automático via **GitHub** (push → build → deploy)
   - ⚠️ Drag-and-drop NÃO funciona para Functions — só Git ou Netlify CLI processam `netlify.toml` e a pasta `netlify/functions/`
 - **Repositório**: público no GitHub (necessário ficar público para o plano free do Netlify puxar automaticamente sem fricção)
@@ -111,7 +113,7 @@ do site público — é "secreta por obscuridade" + login obrigatório. Não há
 - Correção de segurança: views recriadas com `security_invoker` (linter do Supabase apontou `security_definer_view` e `auth_users_exposed` — corrigido)
 - Header `Cache-Control: no-cache` no netlify.toml pra evitar cache de HTML antigo travando updates
 - **Veterinário "volante"**: campo `categoria` (fixo/volante) + tabela N:N `veterinario_locais` + modal com checklist de múltiplos petshops
-- **Importar/Exportar CSV** na aba Análise Detalhada (prescrições e ranking de medicamentos, com modelo de planilha pra download)
+- **Exportação em Excel e PDF** na aba Análise Detalhada (prescrições e ranking de medicamentos) — sem importação, só exportação
 - **Portal do veterinário (`vet.html`)**: login próprio, busca prescrições do vet logado por `veterinario_id` ou nome/CRMV em texto livre, mostra stats e lista filtrada
 - **Validação de campos numéricos**: telefone (index.html, gerencia.html) tem máscara em tempo real `(98) 9 0000-0000` que bloqueia letras e valida 10-11 dígitos no submit; CNPJ tem máscara `00.000.000/0000-00` e valida 14 dígitos; CRMV aceita só números (3-6 dígitos)
 - **4 gráficos de pizza** na Análise Detalhada: prescrições por bairro (top 8 + "Outros"), status (pendente/analisada), origem (público/admin), medicamentos por categoria do catálogo — todos com tooltip mostrando %, clicáveis quando aplicável (bairro e status filtram a lista de prescrições)
@@ -120,38 +122,40 @@ do site público — é "secreta por obscuridade" + login obrigatório. Não há
 
 ## 6. Status da sessão atual (mais recente)
 
-✅ **2 mudanças implementadas nesta sessão:**
+✅ **Exportação substituída de CSV para Excel + PDF, e importação removida completamente**
 
-1. **Modal de foto reestruturado para comparação lado a lado**: ao clicar em "Foto" numa prescrição, o modal agora mostra a imagem da receita à esquerda e, à direita, todos os dados já registrados no sistema (petshop, veterinário, bairro, status, lista de medicamentos com origem 🤖/💊, observações, data de recebimento). O admin consegue comparar visualmente a receita original com o que foi cadastrado, sem precisar abrir um segundo modal de detalhes.
-   - Criada função compartilhada `renderDadosPrescricao(p)` — usada tanto por `verDetalhes()` (modal antigo de detalhes) quanto pelo novo painel lado a lado em `verFoto()`, evitando duplicação de HTML
-   - Layout em grid 2 colunas (`.foto-compare-grid`), responsivo — empilha em coluna única em telas <760px
-   - Quando a IA identifica medicamentos com sucesso (botão manual), a coluna de dados se atualiza automaticamente sem precisar fechar/reabrir o modal
-   - Modal aumentado de `max-width:600px` para `max-width:1100px` para acomodar as duas colunas
+A pedido do usuário, a aba "Análise Detalhada" agora tem **apenas exportação** (sem importação em massa) e os formatos mudaram de CSV para **Excel (.xlsx)** e **PDF**:
 
-2. **Campo de busca removido do header** (estava sem função real — nunca filtrava nada na prática visível ao usuário):
-   - Removido o `<input id="search-input">` da topbar
-   - A funcionalidade de filtro por texto **continua existindo internamente** — é usada quando o admin clica num item de ranking/gráfico de petshop, veterinário ou medicamento (antes dependia do campo de busca visível, que foi substituído por uma variável de estado `currentTextFilter`)
-   - Adicionado um badge visual "🔗 Filtro: [valor] ×" na aba Prescrições que aparece **somente quando** esse filtro está ativo (por clique em gráfico/ranking), com botão para limpar — assim o filtro continua visível e controlável mesmo sem o input fixo no header
-   - Função `handleSearch()` foi removida; substituída por `aplicarFiltroTextoInterno()` e `limparFiltroTexto()`
+1. **Bibliotecas adicionadas** (via CDN, sem custo): `xlsx.full.min.js` (SheetJS, gera `.xlsx` real), `jspdf.umd.min.js` + `jspdf.plugin.autotable.min.js` (gera PDF com tabela formatada)
 
-✅ Sintaxe JS revalidada com `node --check` após as mudanças
-✅ HTML balanceado (divs) revalidado via contagem programática (292 aberturas = 292 fechamentos)
-✅ Confirmado: nenhuma referência órfã a `search-input`/`handleSearch` restante no arquivo
+2. **4 botões de exportação**:
+   - 📊 Exportar prescrições (Excel) — `exportarPrescricoesExcel()`
+   - 📊 Exportar ranking de medicamentos (Excel) — `exportarMedicamentosExcel()`
+   - 📄 Exportar prescrições (PDF) — `exportarPrescricoesPDF()` (paisagem A4, cabeçalho com logo/cores da marca)
+   - 📄 Exportar ranking de medicamentos (PDF) — `exportarMedicamentosPDF()` (retrato A4)
+
+3. **Funções auxiliares compartilhadas**: `gerarLinhasPrescricoes()` e `gerarLinhasRankingMedicamentos()` montam os dados em formato de array-de-arrays uma única vez, reaproveitados tanto pelo Excel quanto pelo PDF (evita duplicar a lógica de quais colunas exportar)
+
+4. **Removido completamente**: todo o fluxo de importação de CSV — `importarPrescricoesCSV()`, `parseCSV()`, `downloadModeloCSV()`, o input de arquivo no header, e a div de status de importação (`#import-status`). O card mudou de "Importar e Exportar Dados" para apenas "Exportar Dados".
+
+✅ Sintaxe JS revalidada com `node --check`
+✅ HTML balanceado (divs) revalidado (291 aberturas = 291 fechamentos)
+✅ Confirmado: nenhuma referência órfã a `import-status`, `import-csv-input`, `csvEscape`, `downloadCSV` restante no arquivo
 
 ### Pendente para o usuário executar
 1. Fazer commit + push pro GitHub pra disparar o deploy automático no Netlify
-2. Testar o modal de foto: clicar em "Foto" numa prescrição e confirmar que os dados aparecem corretamente ao lado da imagem
-3. Testar o fluxo de IA dentro do modal: clicar "Identificar com IA" numa prescrição sem medicamentos e confirmar que a coluna de dados atualiza sozinha
-4. Confirmar visualmente que o header não tem mais o campo de busca
-5. Testar o badge de filtro: clicar num item do gráfico/ranking (ex: um petshop) e confirmar que aparece o badge "🔗 Filtro: ..." na aba Prescrições, com botão de limpar funcionando
+2. Testar os 4 botões de exportação na aba Análise Detalhada — confirmar que os arquivos `.xlsx` abrem corretamente no Excel/Google Sheets e que os PDFs vêm formatados com a tabela legível
+3. Confirmar visualmente que a opção de importar CSV não existe mais na interface
 
 ---
 
-### Histórico — sessão anterior (resumo)
+### Histórico — sessões anteriores (resumo)
+
+✅ Modal de foto reestruturado para comparação lado a lado (foto + dados da prescrição), função compartilhada `renderDadosPrescricao()`. Campo de busca sem função removido do header, substituído por filtro interno acionado por clique em gráficos/rankings, com badge visual de filtro ativo.
 
 ✅ Bug de upload de foto PNG resolvido: bucket `prescricoes` tinha `allowed_mime_types` restringindo a tipos diferentes de PNG, causando erro "row-level security policy" enganoso. Corrigido com `correcao_png_rls.sql`.
 
-✅ 4 mudanças implementadas: (1) IA combinada com manual — roda sempre que há foto, soma total manual+IA; (2) botão "Identificar com IA" só aparece se a prescrição ainda não tem medicamentos vinculados; (3) validação de telefone/CNPJ/CRMV com máscara em tempo real; (4) 4 gráficos de pizza na Análise Detalhada (bairro, status, origem, categoria de medicamentos).
+✅ IA combinada com manual (soma total manual+IA); botão "Identificar com IA" só aparece se a prescrição ainda não tem medicamentos vinculados; validação de telefone/CNPJ/CRMV com máscara em tempo real; 4 gráficos de pizza na Análise Detalhada (bairro, status, origem, categoria de medicamentos).
 
 ### Ideia futura (não pedida ainda)
 - Permitir o próprio veterinário logado em `/vet` enviar uma nova prescrição direto por ali, sem precisar ir no site público — hoje `/vet` é só visualização.

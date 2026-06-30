@@ -7,6 +7,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <style>
     :root {
       --green:#0E3B3E; --green-mid:#1B5E5E; --green-light:#4FA89C;
@@ -322,19 +325,15 @@
     <div class="panel" id="panel-analise">
       <div class="card">
         <div class="card-header">
-          <div><div class="card-title">📁 Importar e Exportar Dados</div><div class="card-sub">Baixe os dados das prescrições em CSV ou importe um arquivo para cadastro em massa</div></div>
+          <div><div class="card-title">📁 Exportar Dados</div><div class="card-sub">Baixe os dados das prescrições em Excel ou PDF</div></div>
         </div>
         <div class="card-body-pad" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center">
-          <button class="btn btn-primary btn-sm" onclick="exportarPrescricoesCSV()">⬇️ Exportar prescrições (CSV)</button>
-          <button class="btn btn-outline btn-sm" onclick="exportarMedicamentosCSV()">⬇️ Exportar ranking de medicamentos (CSV)</button>
+          <button class="btn btn-primary btn-sm" onclick="exportarPrescricoesExcel()">📊 Exportar prescrições (Excel)</button>
+          <button class="btn btn-outline btn-sm" onclick="exportarMedicamentosExcel()">📊 Exportar ranking de medicamentos (Excel)</button>
           <span style="width:1px;height:24px;background:var(--border-col)"></span>
-          <label class="btn btn-outline btn-sm" style="cursor:pointer">
-            ⬆️ Importar prescrições (CSV)
-            <input type="file" accept=".csv" id="import-csv-input" style="display:none" onchange="importarPrescricoesCSV(this)" />
-          </label>
-          <a href="#" onclick="downloadModeloCSV();return false" style="font-size:12px;color:var(--gray-mid);text-decoration:underline">baixar modelo de planilha</a>
+          <button class="btn btn-primary btn-sm" onclick="exportarPrescricoesPDF()">📄 Exportar prescrições (PDF)</button>
+          <button class="btn btn-outline btn-sm" onclick="exportarMedicamentosPDF()">📄 Exportar ranking de medicamentos (PDF)</button>
         </div>
-        <div id="import-status" class="card-body-pad" style="display:none;padding-top:0"></div>
       </div>
 
       <div class="card">
@@ -1197,166 +1196,109 @@ function goToFilteredPrescricoes(tipo, valor) {
   showToast(`🔗 Filtrando por: ${valor}`);
 }
 
-/* ════════════ EXPORTAR / IMPORTAR CSV ════════════ */
+/* ════════════ EXPORTAR DADOS (Excel e PDF) ════════════ */
 
-function csvEscape(value) {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return '"' + str.replace(/"/g, '""') + '"';
-  }
-  return str;
-}
-
-function downloadCSV(filename, rows) {
-  const csvContent = rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
-  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM para acentuação no Excel
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function exportarPrescricoesCSV() {
-  if (!allPrescricoes.length) { showToast('Não há prescrições para exportar.'); return; }
-  const header = ['ID', 'Petshop', 'Veterinário', 'Bairro', 'Status', 'Origem', 'Medicamentos', 'Telefone', 'Observações', 'Criado em', 'Analisado por', 'Analisado em'];
+function gerarLinhasPrescricoes() {
+  const header = ['Petshop', 'Veterinário', 'Bairro', 'Status', 'Origem', 'Medicamentos', 'Telefone', 'Observações', 'Criado em', 'Analisado por', 'Analisado em'];
   const rows = [header];
   allPrescricoes.forEach(p => {
     const meds = (p.prescricao_medicamentos || []).map(m => medNome(m) + (m.dosagem ? ` (${m.dosagem})` : '')).join(' | ');
     const tel = p.observacoes && p.observacoes.includes('Telefone:') ? p.observacoes.split('Telefone:')[1].trim() : '';
     rows.push([
-      p.id, p.local_nome || '', p.veterinario_nome || '', p.bairro_nome || '',
-      p.status, p.origem, meds, tel, p.observacoes || '',
-      p.criado_em, p.analisado_por_email || '', p.analisado_em || ''
+      p.local_nome || '', p.veterinario_nome || '', p.bairro_nome || '',
+      p.status === 'pendente' ? 'Pendente' : 'Analisada',
+      p.origem === 'admin' ? 'Registrada pelo admin' : 'Formulário público',
+      meds, tel, p.observacoes || '',
+      formatDate(p.criado_em), p.analisado_por_email || '', p.analisado_em ? formatDate(p.analisado_em) : ''
     ]);
   });
-  downloadCSV(`vetra_prescricoes_${new Date().toISOString().slice(0,10)}.csv`, rows);
-  showToast('✅ Exportado: ' + (rows.length - 1) + ' prescrições.');
+  return rows;
 }
 
-function exportarMedicamentosCSV() {
+function gerarLinhasRankingMedicamentos() {
   const allMeds = [];
   allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));
   const ranking = buildRanking(allMeds, m => medNome(m));
-  if (!ranking.length) { showToast('Não há dados de medicamentos para exportar.'); return; }
   const rows = [['Medicamento', 'Total de prescrições']];
   ranking.forEach(r => rows.push([r[0], r[1]]));
-  downloadCSV(`vetra_ranking_medicamentos_${new Date().toISOString().slice(0,10)}.csv`, rows);
-  showToast('✅ Ranking de medicamentos exportado.');
+  return rows;
 }
 
-function downloadModeloCSV() {
-  const rows = [
-    ['petshop', 'veterinario', 'bairro', 'medicamentos', 'telefone', 'observacoes'],
-    ['PetCenter Cohama', 'Dr. Rafael Matos', 'Cohama', 'Doxiciclina (100mg) | Metronidazol (250mg)', '(98) 99111-2233', 'Exemplo de prescrição importada'],
-  ];
-  downloadCSV('vetra_modelo_importacao.csv', rows);
+/* ── EXCEL (via SheetJS) ── */
+function exportarPrescricoesExcel() {
+  if (!allPrescricoes.length) { showToast('Não há prescrições para exportar.'); return; }
+  const rows = gerarLinhasPrescricoes();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:22},{wch:20},{wch:16},{wch:12},{wch:18},{wch:40},{wch:16},{wch:30},{wch:16},{wch:18},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Prescrições');
+  XLSX.writeFile(wb, `vetra_prescricoes_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('✅ Excel exportado: ' + (rows.length - 1) + ' prescrições.');
 }
 
-/* Parser de CSV simples — lida com aspas e vírgulas dentro de campos */
-function parseCSV(text) {
-  const rows = [];
-  let row = [], field = '', inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i+1] === '"') { field += '"'; i++; }
-        else inQuotes = false;
-      } else field += c;
-    } else {
-      if (c === '"') inQuotes = true;
-      else if (c === ',') { row.push(field); field = ''; }
-      else if (c === '\n' || c === '\r') {
-        if (c === '\r' && text[i+1] === '\n') i++;
-        row.push(field); rows.push(row); row = []; field = '';
-      } else field += c;
-    }
-  }
-  if (field.length || row.length) { row.push(field); rows.push(row); }
-  return rows.filter(r => r.length > 1 || (r.length === 1 && r[0].trim() !== ''));
+function exportarMedicamentosExcel() {
+  const rows = gerarLinhasRankingMedicamentos();
+  if (rows.length < 2) { showToast('Não há dados de medicamentos para exportar.'); return; }
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:30},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ranking Medicamentos');
+  XLSX.writeFile(wb, `vetra_ranking_medicamentos_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('✅ Ranking de medicamentos exportado em Excel.');
 }
 
-async function importarPrescricoesCSV(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const statusEl = document.getElementById('import-status');
-  statusEl.style.display = 'block';
-  statusEl.innerHTML = '<span class="spinner"></span> Lendo arquivo...';
+/* ── PDF (via jsPDF + autotable) ── */
+function exportarPrescricoesPDF() {
+  if (!allPrescricoes.length) { showToast('Não há prescrições para exportar.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  try {
-    const text = await file.text();
-    const rows = parseCSV(text.replace(/^\uFEFF/, '')); // remove BOM se existir
-    if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados além do cabeçalho.');
+  doc.setFontSize(16);
+  doc.setTextColor(14, 59, 62);
+  doc.text('VETRA Distribuidora — Relatório de Prescrições', 14, 15);
+  doc.setFontSize(9);
+  doc.setTextColor(120, 135, 134);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} — Total: ${allPrescricoes.length} prescrições`, 14, 21);
 
-    const header = rows[0].map(h => h.trim().toLowerCase());
-    const idx = {
-      petshop: header.indexOf('petshop'),
-      veterinario: header.indexOf('veterinario'),
-      bairro: header.indexOf('bairro'),
-      medicamentos: header.indexOf('medicamentos'),
-      telefone: header.indexOf('telefone'),
-      observacoes: header.indexOf('observacoes'),
-    };
-    if (idx.petshop === -1 || idx.bairro === -1) {
-      throw new Error('Colunas obrigatórias não encontradas. Use o modelo de planilha (colunas: petshop, veterinario, bairro, medicamentos, telefone, observacoes).');
-    }
+  const rows = gerarLinhasPrescricoes();
+  doc.autoTable({
+    head: [rows[0]],
+    body: rows.slice(1),
+    startY: 26,
+    styles: { fontSize: 7, cellPadding: 2 },
+    headStyles: { fillColor: [14, 59, 62], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [244, 247, 246] },
+    columnStyles: { 5: { cellWidth: 60 } }, // coluna Medicamentos mais larga
+  });
 
-    let sucesso = 0, falhas = 0;
-    const linhasDados = rows.slice(1);
+  doc.save(`vetra_prescricoes_${new Date().toISOString().slice(0,10)}.pdf`);
+  showToast('✅ PDF exportado: ' + allPrescricoes.length + ' prescrições.');
+}
 
-    for (const linha of linhasDados) {
-      if (!linha[idx.petshop] || !linha[idx.petshop].trim()) continue;
+function exportarMedicamentosPDF() {
+  const rows = gerarLinhasRankingMedicamentos();
+  if (rows.length < 2) { showToast('Não há dados de medicamentos para exportar.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-      const bairroNomeCSV = (linha[idx.bairro] || '').trim();
-      const bairroMatch = allBairros.find(b => b.nome.toLowerCase() === bairroNomeCSV.toLowerCase());
+  doc.setFontSize(16);
+  doc.setTextColor(14, 59, 62);
+  doc.text('VETRA Distribuidora — Ranking de Medicamentos', 14, 15);
+  doc.setFontSize(9);
+  doc.setTextColor(120, 135, 134);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} — Total: ${rows.length - 1} medicamentos distintos`, 14, 21);
 
-      const prescId = crypto.randomUUID();
-      const { error: prescErr } = await sb.from('prescricoes').insert({
-        id: prescId,
-        local_nome: linha[idx.petshop].trim(),
-        veterinario_nome: idx.veterinario > -1 ? (linha[idx.veterinario] || '').trim() : '',
-        bairro_id: bairroMatch ? bairroMatch.id : null,
-        bairro_nome: bairroMatch ? bairroMatch.nome : bairroNomeCSV,
-        observacoes: (idx.observacoes > -1 ? linha[idx.observacoes] || '' : '') + (idx.telefone > -1 && linha[idx.telefone] ? '\nTelefone: ' + linha[idx.telefone] : ''),
-        origem: 'admin',
-        status: 'analisado',
-        analisado_por: currentUser?.id || null,
-        analisado_em: new Date().toISOString()
-      });
+  doc.autoTable({
+    head: [rows[0]],
+    body: rows.slice(1),
+    startY: 26,
+    styles: { fontSize: 10, cellPadding: 3 },
+    headStyles: { fillColor: [14, 59, 62], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [244, 247, 246] },
+  });
 
-      if (prescErr) { falhas++; continue; }
-
-      if (idx.medicamentos > -1 && linha[idx.medicamentos]) {
-        const medsTexto = linha[idx.medicamentos].split('|').map(s => s.trim()).filter(Boolean);
-        const registros = medsTexto.map((texto, i) => {
-          const match = texto.match(/^(.+?)\s*\((.+)\)$/); // "Nome (dosagem)"
-          const nome = match ? match[1].trim() : texto;
-          const dosagem = match ? match[2].trim() : '';
-          const medCatalogo = allMedicamentos.find(m => m.nome.toLowerCase() === nome.toLowerCase());
-          return {
-            prescricao_id: prescId,
-            medicamento_id: medCatalogo ? medCatalogo.id : null,
-            nome_livre: medCatalogo ? null : nome,
-            dosagem, ordem: i, origem: 'manual'
-          };
-        });
-        if (registros.length) await sb.from('prescricao_medicamentos').insert(registros);
-      }
-      sucesso++;
-    }
-
-    statusEl.innerHTML = `✅ Importação concluída: <strong>${sucesso}</strong> prescrições importadas` + (falhas ? `, ${falhas} com erro` : '') + '.';
-    showToast(`✅ ${sucesso} prescrições importadas!`);
-    await loadPrescricoes();
-
-  } catch (err) {
-    console.error('Erro ao importar CSV:', err);
-    statusEl.innerHTML = '❌ Erro: ' + err.message;
-  } finally {
-    input.value = '';
-  }
+  doc.save(`vetra_ranking_medicamentos_${new Date().toISOString().slice(0,10)}.pdf`);
+  showToast('✅ Ranking de medicamentos exportado em PDF.');
 }
 
 function renderCharts() {

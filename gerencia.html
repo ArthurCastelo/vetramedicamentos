@@ -274,7 +274,7 @@
     <!-- ══ DASHBOARD ══ -->
     <div class="panel active" id="panel-dashboard">
       <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-num" id="kpi-total" style="color:var(--green)">—</div><div class="kpi-label">Total de prescrições</div><div class="kpi-trend" id="kpi-mes">—</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-num" id="kpi-total" style="color:var(--green)">—</div><div class="kpi-label">Total de prescrições</div><div class="kpi-trend" id="kpi-mes">—</div><div class="kpi-trend" id="kpi-confirmados" style="color:var(--green-mid)">—</div></div>
         <div class="kpi-card"><div class="kpi-icon">⏳</div><div class="kpi-num" id="kpi-pendentes" style="color:var(--orange)">—</div><div class="kpi-label">Pendentes de análise</div></div>
         <div class="kpi-card"><div class="kpi-icon">🩺</div><div class="kpi-num" id="kpi-vets" style="color:var(--green)">—</div><div class="kpi-label">Veterinários cadastrados</div></div>
         <div class="kpi-card"><div class="kpi-icon">🏪</div><div class="kpi-num" id="kpi-locais" style="color:var(--green)">—</div><div class="kpi-label">Petshops cadastrados</div></div>
@@ -873,6 +873,9 @@ async function loadPrescricoes() {
   const esteMes = allPrescricoes.filter(p => new Date(p.criado_em) >= inicioMes).length;
   document.getElementById('kpi-mes').textContent = `${esteMes} este mês`;
 
+  const confirmadas = prescricoesComConfirmados().length;
+  document.getElementById('kpi-confirmados').textContent = `${confirmadas} com medicamentos confirmados`;
+
   renderPresc();
   renderDashPresc();
   renderRankings();
@@ -1274,19 +1277,38 @@ function renderRankingHTML(ranking, tipo) {
       <div class="ranking-val">${r[1]}</div>
     </div>`).join('');
 }
+/* ── Filtra apenas prescrições que têm ao menos 1 medicamento confirmado ── */
+function prescricoesComConfirmados() {
+  return allPrescricoes.filter(p =>
+    (p.prescricao_medicamentos || []).some(m => m.confirmado === true)
+  );
+}
+/* ── Filtra apenas medicamentos confirmados de todas as prescrições ── */
+function medicamentosConfirmados() {
+  const result = [];
+  allPrescricoes.forEach(p =>
+    (p.prescricao_medicamentos || []).forEach(m => {
+      if (m.confirmado === true) result.push(m);
+    })
+  );
+  return result;
+}
+
 function renderRankings() {
-  const rBairros = buildRanking(allPrescricoes, p => p.bairro_nome);
+  /* Rankings do dashboard: só prescrições com ao menos 1 medicamento confirmado */
+  const prescConf = prescricoesComConfirmados();
+  const medsConf  = medicamentosConfirmados();
+
+  const rBairros = buildRanking(prescConf, p => p.bairro_nome);
   document.getElementById('rank-bairros').innerHTML = renderRankingHTML(rBairros, 'bairro');
 
-  const rPetshops = buildRanking(allPrescricoes, p => p.local_nome);
+  const rPetshops = buildRanking(prescConf, p => p.local_nome);
   document.getElementById('rank-petshops').innerHTML = renderRankingHTML(rPetshops, 'petshop');
 
-  const rVets = buildRanking(allPrescricoes, p => p.veterinario_nome);
+  const rVets = buildRanking(prescConf, p => p.veterinario_nome);
   document.getElementById('rank-veterinarios').innerHTML = renderRankingHTML(rVets, 'veterinario');
 
-  const allMeds = [];
-  allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));
-  const rMeds = buildRanking(allMeds, m => medNome(m));
+  const rMeds = buildRanking(medsConf, m => medNome(m));
   document.getElementById('rank-medicamentos').innerHTML = renderRankingHTML(rMeds, 'medicamento');
 }
 
@@ -1440,10 +1462,13 @@ function exportarClientesPDF() {
 }
 
 function gerarLinhasPrescricoes() {
-  const header = ['Petshop', 'Veterinário', 'Bairro', 'Status', 'Origem', 'Medicamentos', 'Telefone', 'Observações', 'Criado em', 'Analisado por', 'Analisado em'];
+  const header = ['Petshop', 'Veterinário', 'Bairro', 'Status', 'Origem', 'Medicamentos confirmados', 'Telefone', 'Observações', 'Criado em', 'Analisado por', 'Analisado em'];
   const rows = [header];
-  allPrescricoes.forEach(p => {
-    const meds = (p.prescricao_medicamentos || []).map(m => medNome(m) + (m.dosagem ? ` (${m.dosagem})` : '')).join(' | ');
+  /* Exporta apenas prescrições que tenham ao menos 1 medicamento confirmado */
+  prescricoesComConfirmados().forEach(p => {
+    const meds = (p.prescricao_medicamentos || [])
+      .filter(m => m.confirmado === true)
+      .map(m => medNome(m) + (m.dosagem ? ` (${m.dosagem})` : '')).join(' | ');
     const tel = p.observacoes && p.observacoes.includes('Telefone:') ? p.observacoes.split('Telefone:')[1].trim() : '';
     rows.push([
       p.local_nome || '', p.veterinario_nome || '', p.bairro_nome || '',
@@ -1457,10 +1482,8 @@ function gerarLinhasPrescricoes() {
 }
 
 function gerarLinhasRankingMedicamentos() {
-  const allMeds = [];
-  allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));
-  const ranking = buildRanking(allMeds, m => medNome(m));
-  const rows = [['Medicamento', 'Total de prescrições']];
+  const ranking = buildRanking(medicamentosConfirmados(), m => medNome(m));
+  const rows = [['Medicamento', 'Total de prescrições confirmadas']];
   ranking.forEach(r => rows.push([r[0], r[1]]));
   return rows;
 }
@@ -1544,11 +1567,14 @@ function exportarMedicamentosPDF() {
 
 function renderCharts() {
   renderRankingClientes(); // atualiza o ranking de clientes ao abrir a aba
-  const rBairros = buildRanking(allPrescricoes, p => p.bairro_nome).slice(0,10);
-  const allMeds = [];
-  allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));
-  const rMeds = buildRanking(allMeds, m => medNome(m)).slice(0,10);
-  const rPetshops = buildRanking(allPrescricoes, p => p.local_nome).slice(0,10);
+
+  /* Dados filtrados: apenas prescrições/medicamentos confirmados pelo admin */
+  const prescConf = prescricoesComConfirmados();
+  const medsConf  = medicamentosConfirmados();
+
+  const rBairros  = buildRanking(prescConf, p => p.bairro_nome).slice(0,10);
+  const rMeds     = buildRanking(medsConf,  m => medNome(m)).slice(0,10);
+  const rPetshops = buildRanking(prescConf, p => p.local_nome).slice(0,10);
 
   if (chartBairros) chartBairros.destroy();
   if (chartMedicamentos) chartMedicamentos.destroy();
@@ -1625,8 +1651,8 @@ function renderCharts() {
   if (chartPizzaOrigem) chartPizzaOrigem.destroy();
   if (chartPizzaCategoria) chartPizzaCategoria.destroy();
 
-  // 1. Pizza — Prescrições por bairro (top 8 + "Outros")
-  const rBairrosTodos = buildRanking(allPrescricoes, p => p.bairro_nome);
+  // 1. Pizza — Prescrições por bairro (só prescrições com ao menos 1 confirmado)
+  const rBairrosTodos = buildRanking(prescConf, p => p.bairro_nome);
   const top8Bairros = rBairrosTodos.slice(0, 8);
   const restoBairros = rBairrosTodos.slice(8).reduce((sum, r) => sum + r[1], 0);
   const labelsBairrosPizza = top8Bairros.map(r => r[0]).concat(restoBairros > 0 ? ['Outros'] : []);

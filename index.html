@@ -6,6 +6,12 @@
   <title>VETRA Distribuidora — Medicamentos Veterinários</title>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <style>
     :root {
       --green:#0E3B3E; --green-mid:#1B5E5E; --green-light:#4FA89C;
@@ -675,11 +681,25 @@
       let avisoIA = '';
       if (fotoEnviada && compressedFileForAI) {
         try {
-          const base64 = await fileToBase64(compressedFileForAI);
+          let base64, mimeType;
+          if (compressedFileForAI.type === 'application/pdf' && typeof pdfjsLib !== 'undefined') {
+            const arrayBuffer = await compressedFileForAI.arrayBuffer();
+            const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const page = await pdfDoc.getPage(1);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width; canvas.height = viewport.height;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+            mimeType = 'image/jpeg';
+          } else {
+            base64 = await fileToBase64(compressedFileForAI);
+            mimeType = compressedFileForAI.type;
+          }
           const resp = await fetch('/.netlify/functions/analisar-foto', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prescricaoId: prescId, imageBase64: base64, mimeType: compressedFileForAI.type })
+            body: JSON.stringify({ prescricaoId: prescId, imageBase64: base64, mimeType })
           });
           const result = await resp.json();
           if (resp.ok && result.medicamentosSalvos > 0) {

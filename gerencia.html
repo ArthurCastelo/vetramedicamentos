@@ -10,6 +10,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    // Configura o worker do PDF.js
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <style>
     :root {
       --green:#0E3B3E; --green-mid:#1B5E5E; --green-light:#4FA89C;
@@ -349,6 +356,20 @@
         <div class="card-body-pad"><div style="position:relative;height:340px"><canvas id="chart-petshops" role="img" aria-label="Gráfico de barras de petshops com mais prescrições">Gráfico de petshops</canvas></div></div>
       </div>
 
+      <!-- Dashboard de Clientes (Petshops) -->
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">🏪 Clientes que mais prescrevem</div><div class="card-sub">Ranking de petshops por volume de prescrições com medicamentos confirmados pela VETRA</div></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="exportarClientesExcel()">📊 Excel</button>
+            <button class="btn btn-outline btn-sm" onclick="exportarClientesPDF()">📄 PDF</button>
+          </div>
+        </div>
+        <div class="card-body-pad" id="analise-ranking-clientes">
+          <div class="empty"><div class="empty-icon">🏪</div>Sem dados confirmados ainda</div>
+        </div>
+      </div>
+
       <div style="margin:2rem 0 1rem"><div class="card-title" style="font-size:1.05rem">🥧 Distribuição em gráficos de pizza</div></div>
       <div class="dash-grid-2">
         <div class="card">
@@ -438,8 +459,9 @@
     <div class="modal-title">📷 Foto da Prescrição</div>
     <div class="foto-compare-grid">
       <div class="foto-compare-col">
-        <img id="foto-img" class="foto-preview" src="" alt="Foto da prescrição" />
-        <p id="foto-loading" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando imagem...</p>
+        <img id="foto-img" class="foto-preview" src="" alt="Foto da prescrição" style="display:none" />
+        <embed id="foto-pdf" class="foto-preview" type="application/pdf" style="display:none;height:460px;border-radius:10px" />
+        <p id="foto-loading" style="text-align:center;color:var(--gray-mid);padding:2rem">Carregando...</p>
         <button class="btn btn-primary" id="btn-analisar-ia" style="width:100%;justify-content:center;margin-top:1rem" onclick="analisarFotoComIA()">
           🤖 Identificar medicamentos com IA
         </button>
@@ -455,9 +477,31 @@
 
 <!-- ════════ MODAL DETALHES ════════ -->
 <div class="modal-overlay" id="modal-det">
-  <div class="modal"><button class="modal-close" onclick="document.getElementById('modal-det').classList.remove('open')">×</button>
-    <div class="modal-title">📋 Detalhes da Prescrição</div>
+  <div class="modal" style="max-width:780px">
+    <button class="modal-close" onclick="document.getElementById('modal-det').classList.remove('open')">×</button>
+    <div class="modal-title">📋 Análise da Prescrição</div>
     <div id="det-body"></div>
+    <!-- Painéis de confirmação de medicamentos -->
+    <div id="det-confirmacao" style="display:none;margin-top:1.5rem">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-mid);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem">
+        📦 Confirme quais medicamentos a VETRA possui em estoque
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--green-mid);margin-bottom:8px">✅ A VETRA tem</div>
+          <div id="det-meds-tem" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:8px">❌ A VETRA não tem</div>
+          <div id="det-meds-naotem" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+      <div id="det-confirmados-ja" style="display:none;margin-top:1rem;padding:10px 14px;background:var(--green-pale);border-radius:8px;font-size:13px;color:var(--green-mid)"></div>
+      <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border-col);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;color:var(--gray-mid)">Somente os medicamentos confirmados como "A VETRA tem" entrarão nas métricas de análise.</span>
+        <button class="btn btn-primary btn-sm" id="btn-salvar-confirmacao" onclick="salvarConfirmacaoMedicamentos()">💾 Salvar confirmação</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -960,22 +1004,34 @@ async function verFoto(fotoUrl, prescricaoId) {
   }
 
   const cleanPath = fotoUrl.replace('prescricoes/','');
+  const isPDF = cleanPath.toLowerCase().endsWith('.pdf');
 
-  /* 1. Tenta servir do Cache Storage do navegador (zero egress no Supabase) */
-  if ('caches' in window) {
+  function mostrarArquivo(url) {
+    document.getElementById('foto-loading').style.display = 'none';
+    if (isPDF) {
+      document.getElementById('foto-img').style.display = 'none';
+      const embed = document.getElementById('foto-pdf');
+      embed.src = url; embed.style.display = 'block';
+    } else {
+      document.getElementById('foto-pdf').style.display = 'none';
+      const img = document.getElementById('foto-img');
+      img.src = url; img.style.display = 'block';
+    }
+  }
+
+  /* 1. Tenta servir do Cache Storage (só imagens — PDFs não se beneficiam) */
+  if (!isPDF && 'caches' in window) {
     try {
       const cache = await caches.open(IMG_CACHE_NAME);
       const cachedResp = await cache.match(cleanPath);
       if (cachedResp) {
         const blob = await cachedResp.blob();
         const objUrl = URL.createObjectURL(blob);
-        document.getElementById('foto-img').src = objUrl;
-        document.getElementById('foto-img').style.display = 'block';
-        document.getElementById('foto-loading').style.display = 'none';
+        mostrarArquivo(objUrl);
         fotoModalContext.signedUrl = objUrl;
         return;
       }
-    } catch(e) { /* segue para buscar normalmente */ }
+    } catch(e) { /* segue */ }
   }
 
   /* 2. Reusa URL assinada em memória, se ainda válida */
@@ -983,6 +1039,7 @@ async function verFoto(fotoUrl, prescricaoId) {
   let signedUrl = (cached && cached.expira > Date.now()) ? cached.url : null;
 
   document.getElementById('foto-img').style.display = 'none';
+  document.getElementById('foto-pdf').style.display = 'none';
   try {
     if (!signedUrl) {
       const { data, error } = await sb.storage.from('prescricoes').createSignedUrl(cleanPath, 3600);
@@ -992,13 +1049,12 @@ async function verFoto(fotoUrl, prescricaoId) {
       signedUrlCache[fotoUrl] = { url: signedUrl, expira: Date.now() + 55*60*1000 };
     }
 
-    document.getElementById('foto-img').src = signedUrl;
-    document.getElementById('foto-img').style.display = 'block';
-    document.getElementById('foto-loading').style.display = 'none';
+    mostrarArquivo(signedUrl);
     fotoModalContext.signedUrl = signedUrl;
+    fotoModalContext.isPDF = isPDF;
 
-    /* 3. Salva a imagem no Cache Storage para a próxima vez ser instantânea e sem egress */
-    if ('caches' in window) {
+    /* 3. Salva no Cache Storage (só imagens) */
+    if (!isPDF && 'caches' in window) {
       fetch(signedUrl).then(resp => {
         if (resp.ok) caches.open(IMG_CACHE_NAME).then(cache => cache.put(cleanPath, resp.clone()));
       }).catch(()=>{});
@@ -1021,20 +1077,41 @@ async function analisarFotoComIA() {
   status.textContent = '';
 
   try {
-    // Busca a imagem já carregada e converte para base64 (sem precisar baixar de novo via signed URL nova)
-    const imgResp = await fetch(signedUrl);
-    const blob = await imgResp.blob();
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    // Busca o arquivo (imagem ou PDF)
+    const fileResp = await fetch(signedUrl);
+    const blob = await fileResp.blob();
+
+    let base64, mimeType;
+
+    if (fotoModalContext.isPDF && typeof pdfjsLib !== 'undefined') {
+      // Converte a primeira página do PDF para imagem JPEG via canvas, depois manda para o Groq
+      status.textContent = '📄 Convertendo PDF em imagem para análise...';
+      const arrayBuffer = await blob.arrayBuffer();
+      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdfDoc.getPage(1);
+      const viewport = page.getViewport({ scale: 2.0 }); // escala 2x para melhor resolução
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+      mimeType = 'image/jpeg';
+      status.textContent = '🤖 Analisando com IA...';
+    } else {
+      // Arquivo é imagem — converte direto para base64
+      base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      mimeType = blob.type || 'image/jpeg';
+    }
 
     const resp = await fetch('/.netlify/functions/analisar-foto', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prescricaoId, imageBase64: base64, mimeType: blob.type || 'image/jpeg' })
+      body: JSON.stringify({ prescricaoId, imageBase64: base64, mimeType })
     });
     const result = await resp.json();
 
@@ -1093,11 +1170,87 @@ function renderDadosPrescricao(p) {
   `;
 }
 
+let detalhesPrescAtual = null;
+
 function verDetalhes(id) {
   const p = allPrescricoes.find(x => x.id === id);
   if (!p) return;
+  detalhesPrescAtual = p;
+
   document.getElementById('det-body').innerHTML = `<div style="display:grid;gap:12px">${renderDadosPrescricao(p)}</div>`;
+
+  const meds = p.prescricao_medicamentos || [];
+  if (!meds.length) {
+    document.getElementById('det-confirmacao').style.display = 'none';
+    document.getElementById('modal-det').classList.add('open');
+    return;
+  }
+
+  document.getElementById('det-confirmacao').style.display = 'block';
+  document.getElementById('det-confirmados-ja').style.display = 'none';
+
+  const jaConfirmados = meds.filter(m => m.confirmado === true).length;
+  const jaRejeitados  = meds.filter(m => m.confirmado === false).length;
+  if (jaConfirmados > 0 || jaRejeitados > 0) {
+    const el = document.getElementById('det-confirmados-ja');
+    el.style.display = 'block';
+    el.innerHTML = `✅ Confirmação já registrada: ${jaConfirmados} "temos" e ${jaRejeitados} "não temos". Atualize abaixo se necessário.`;
+  }
+
+  /* Separa pelo campo medicamento_id: se casou no catálogo → coluna "tem"; se só nome_livre → "não tem" */
+  const temEstoque  = meds.filter(m =>  m.medicamento_id);
+  const semEstoque  = meds.filter(m => !m.medicamento_id);
+
+  function renderMedItem(m) {
+    const nome = medNome(m);
+    const dosagem = m.dosagem ? `<div style="font-size:11px;color:var(--gray-mid);margin-top:2px">${m.dosagem}</div>` : '';
+    const badge = m.origem === 'ia'
+      ? '<span style="font-size:10px;background:#EBF5FF;color:#1A6BBD;padding:2px 6px;border-radius:10px;margin-top:3px;display:inline-block">IA</span>'
+      : '<span style="font-size:10px;background:var(--green-pale);color:var(--green-mid);padding:2px 6px;border-radius:10px;margin-top:3px;display:inline-block">Manual</span>';
+    const borda = m.confirmado === true  ? 'border:2px solid var(--green-mid);background:var(--green-pale)' :
+                  m.confirmado === false ? 'border:2px solid var(--orange);background:var(--orange-light)' :
+                  'border:1.5px solid var(--border-col)';
+    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;${borda}">
+      <input type="checkbox" data-med-id="${m.id}" ${m.confirmado === true ? 'checked' : ''}
+        style="margin-top:3px;width:16px;height:16px;flex-shrink:0" />
+      <div><div style="font-size:13px;font-weight:600">${nome}</div>${dosagem}${badge}</div>
+    </label>`;
+  }
+
+  document.getElementById('det-meds-tem').innerHTML = temEstoque.length
+    ? temEstoque.map(renderMedItem).join('')
+    : '<div style="font-size:12px;color:var(--gray-mid);padding:8px">Nenhum medicamento desta prescrição está no catálogo da VETRA.</div>';
+  document.getElementById('det-meds-naotem').innerHTML = semEstoque.length
+    ? semEstoque.map(renderMedItem).join('')
+    : '<div style="font-size:12px;color:var(--gray-mid);padding:8px">Todos os medicamentos estão no catálogo da VETRA.</div>';
+
   document.getElementById('modal-det').classList.add('open');
+}
+
+async function salvarConfirmacaoMedicamentos() {
+  if (!detalhesPrescAtual) return;
+  const btn = document.getElementById('btn-salvar-confirmacao');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Salvando...';
+
+  const checkboxes = document.querySelectorAll('#det-confirmacao input[type="checkbox"]');
+  let erros = 0;
+  for (const cb of checkboxes) {
+    const { error } = await sb.from('prescricao_medicamentos').update({
+      confirmado: cb.checked,
+      confirmado_por: currentUser?.id || null,
+      confirmado_em: new Date().toISOString()
+    }).eq('id', cb.dataset.medId);
+    if (error) { console.error(error); erros++; }
+  }
+
+  btn.disabled = false; btn.textContent = '💾 Salvar confirmação';
+  if (erros === 0) {
+    showToast('✅ Confirmação salva! Métricas de medicamentos atualizadas.');
+    await loadPrescricoes();
+    document.getElementById('modal-det').classList.remove('open');
+  } else {
+    showToast(`⚠️ ${erros} medicamento(s) não puderam ser salvos.`);
+  }
 }
 
 /* ════════════ RANKINGS (dashboard) ════════════ */
@@ -1197,6 +1350,94 @@ function goToFilteredPrescricoes(tipo, valor) {
 }
 
 /* ════════════ EXPORTAR DADOS (Excel e PDF) ════════════ */
+
+/* ── RANKING DE CLIENTES (petshops que mais prescrevem com medicamentos confirmados) ── */
+function renderRankingClientes() {
+  /* Conta prescrições por petshop onde ao menos 1 medicamento foi confirmado = true */
+  const contagem = {};
+  allPrescricoes.forEach(p => {
+    const temConfirmado = (p.prescricao_medicamentos || []).some(m => m.confirmado === true);
+    if (!temConfirmado) return;
+    const nome = p.local_nome || 'Não informado';
+    contagem[nome] = (contagem[nome] || 0) + 1;
+  });
+
+  const ranking = Object.entries(contagem).sort((a, b) => b[1] - a[1]);
+  const container = document.getElementById('analise-ranking-clientes');
+  if (!container) return;
+
+  if (!ranking.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">🏪</div>Sem dados confirmados ainda. Confirme medicamentos no modal "Ver" para ver os clientes aqui.</div>';
+    return;
+  }
+
+  const max = ranking[0][1];
+  container.innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase;padding:8px 0">#</th>
+        <th style="text-align:left;font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase;padding:8px 0">Petshop / Clínica</th>
+        <th style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase;padding:8px 0;text-align:right">Prescrições</th>
+        <th style="padding:8px 0"></th>
+      </tr></thead>
+      <tbody>${ranking.map(([nome, total], i) => `
+        <tr onclick="goToFilteredPrescricoes('petshop','${nome.replace(/'/g,"\\'")}')" style="cursor:pointer" class="ranking-row-link">
+          <td style="padding:10px 0;font-size:13px;font-weight:700;color:var(--gray-mid);width:28px">${i+1}</td>
+          <td style="padding:10px 0;font-size:14px;font-weight:600">${nome}</td>
+          <td style="padding:10px 0;text-align:right;font-size:14px;font-weight:700;color:var(--green-mid)">${total}</td>
+          <td style="padding:10px 0;padding-left:16px;width:160px">
+            <div style="background:var(--gray-pale);border-radius:4px;overflow:hidden">
+              <div style="height:8px;background:var(--green-mid);border-radius:4px;width:${(total/max*100).toFixed(0)}%"></div>
+            </div>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function gerarLinhasRankingClientes() {
+  const contagem = {};
+  allPrescricoes.forEach(p => {
+    const temConfirmado = (p.prescricao_medicamentos || []).some(m => m.confirmado === true);
+    if (!temConfirmado) return;
+    const nome = p.local_nome || 'Não informado';
+    contagem[nome] = (contagem[nome] || 0) + 1;
+  });
+  const ranking = Object.entries(contagem).sort((a, b) => b[1] - a[1]);
+  const rows = [['Posição', 'Petshop / Clínica', 'Prescrições confirmadas']];
+  ranking.forEach(([nome, total], i) => rows.push([i + 1, nome, total]));
+  return rows;
+}
+
+function exportarClientesExcel() {
+  const rows = gerarLinhasRankingClientes();
+  if (rows.length < 2) { showToast('Sem dados confirmados para exportar.'); return; }
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:8},{wch:30},{wch:22}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Clientes');
+  XLSX.writeFile(wb, `vetra_clientes_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('✅ Ranking de clientes exportado em Excel.');
+}
+
+function exportarClientesPDF() {
+  const rows = gerarLinhasRankingClientes();
+  if (rows.length < 2) { showToast('Sem dados confirmados para exportar.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  doc.setFontSize(16); doc.setTextColor(14, 59, 62);
+  doc.text('VETRA Distribuidora — Clientes que mais prescrevem', 14, 15);
+  doc.setFontSize(9); doc.setTextColor(120, 135, 134);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} — ${rows.length - 1} petshops ranqueados`, 14, 21);
+  doc.autoTable({
+    head: [rows[0]], body: rows.slice(1), startY: 26,
+    styles: { fontSize: 11, cellPadding: 3 },
+    headStyles: { fillColor: [14, 59, 62], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [244, 247, 246] },
+  });
+  doc.save(`vetra_clientes_${new Date().toISOString().slice(0,10)}.pdf`);
+  showToast('✅ Ranking de clientes exportado em PDF.');
+}
 
 function gerarLinhasPrescricoes() {
   const header = ['Petshop', 'Veterinário', 'Bairro', 'Status', 'Origem', 'Medicamentos', 'Telefone', 'Observações', 'Criado em', 'Analisado por', 'Analisado em'];
@@ -1302,6 +1543,7 @@ function exportarMedicamentosPDF() {
 }
 
 function renderCharts() {
+  renderRankingClientes(); // atualiza o ranking de clientes ao abrir a aba
   const rBairros = buildRanking(allPrescricoes, p => p.bairro_nome).slice(0,10);
   const allMeds = [];
   allPrescricoes.forEach(p => (p.prescricao_medicamentos||[]).forEach(m => allMeds.push(m)));

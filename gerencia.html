@@ -1835,31 +1835,55 @@ function renderSolicitacoes() {
 async function aprovarSolicitacao(id) {
   const s = allSolicitacoes.find(x => x.id === id);
   if (!s) return;
-  if (!confirm(`Aprovar o cadastro de "${s.nome}"? Isso vai criar o registro de ${s.tipo === 'veterinario' ? 'veterinário' : 'petshop'} no sistema.`)) return;
+  if (!confirm(`Aprovar o cadastro de "${s.nome}"? Isso vai criar a conta de acesso e o registro de ${s.tipo === 'veterinario' ? 'veterinário' : 'petshop'} no sistema.`)) return;
 
   try {
+    /* Cria a conta Auth com a senha salva na solicitação */
+    let authUserId = s.auth_user_id;
+    if (!authUserId && s.senha_provisoria) {
+      const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
+        email: s.email,
+        password: s.senha_provisoria
+      });
+      if (signUpErr) {
+        if (signUpErr.message?.includes('already registered')) {
+          /* Conta já existe — tenta buscar pelo e-mail (pode ter sido criada antes) */
+          showToast('⚠️ E-mail já tem conta — vinculando cadastro existente...');
+        } else {
+          throw signUpErr;
+        }
+      } else {
+        authUserId = signUpData?.user?.id || null;
+      }
+    }
+
+    /* Cria o registro de veterinário ou petshop */
     if (s.tipo === 'veterinario') {
       const { error } = await sb.from('veterinarios').insert({
         nome: s.nome, email: s.email, telefone: s.telefone,
-        crmv: s.crmv, cpf: s.cpf, bairro_id: s.bairro_id,
-        auth_user_id: s.auth_user_id, categoria: 'fixo', ativo: true
+        crmv: s.crmv, bairro_id: s.bairro_id,
+        auth_user_id: authUserId, categoria: 'fixo', ativo: true
       });
       if (error) throw error;
     } else {
       const { error } = await sb.from('locais').insert({
         nome: s.nome, email: s.email, telefone: s.telefone,
         cnpj: s.cnpj, bairro_id: s.bairro_id,
-        auth_user_id: s.auth_user_id, ativo: true
+        auth_user_id: authUserId, ativo: true
       });
       if (error) throw error;
     }
 
+    /* Atualiza a solicitação */
     const { error: updErr } = await sb.from('solicitacoes_cadastro').update({
-      status: 'aprovado', analisado_por: currentUser?.id || null, analisado_em: new Date().toISOString()
+      status: 'aprovado',
+      auth_user_id: authUserId,
+      analisado_por: currentUser?.id || null,
+      analisado_em: new Date().toISOString()
     }).eq('id', id);
     if (updErr) throw updErr;
 
-    showToast(`✅ ${s.nome} foi aprovado(a)!`);
+    showToast(`✅ ${s.nome} foi aprovado(a)! Conta criada com sucesso.`);
     await loadSolicitacoes();
     await loadVets();
     await loadLocais();

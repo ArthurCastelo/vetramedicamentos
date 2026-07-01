@@ -630,7 +630,7 @@
     if (!nome) return mostrarErroCadastro('Digite o nome.');
     if (!telefoneValido(tel)) return mostrarErroCadastro('Telefone inválido. Use o formato (98) 9 0000-0000.');
     if (!bairroId) return mostrarErroCadastro('Selecione o bairro.');
-    if (!email || !email.includes('@')) return mostrarErroCadastro('Digite um e-mail válido.');
+    if (!email || !email.includes('@') || !email.includes('.')) return mostrarErroCadastro('Digite um e-mail válido.');
     if (!senha || senha.length < 6) return mostrarErroCadastro('A senha precisa ter no mínimo 6 caracteres.');
 
     if (tipoCadastroAtual === 'veterinario') {
@@ -644,13 +644,9 @@
     btn.disabled = true; btn.textContent = 'Enviando...';
 
     try {
-      /* Cria a conta de autenticação (usada depois para o login) */
-      const { data: signUpData, error: signUpErr } = await sb.auth.signUp({ email, password: senha });
-      if (signUpErr) throw signUpErr;
-
-      const authUserId = signUpData?.user?.id || null;
-
-      /* Registra a solicitação para o admin analisar */
+      /* NÃO criamos a conta Auth aqui — evita o rate limit de e-mails do Supabase.
+         A conta será criada pelo admin no momento da aprovação (gerencia.html).
+         A senha provisória fica salva para o admin usar na criação da conta Auth. */
       const { error: insErr } = await sb.from('solicitacoes_cadastro').insert({
         tipo: tipoCadastroAtual,
         nome, email, telefone: tel,
@@ -658,7 +654,7 @@
         crmv: tipoCadastroAtual === 'veterinario' ? crmv : null,
         cpf: tipoCadastroAtual === 'veterinario' ? cpf : null,
         cnpj: tipoCadastroAtual === 'petshop' ? cnpj : null,
-        auth_user_id: authUserId,
+        senha_provisoria: senha,
         status: 'pendente'
       });
       if (insErr) throw insErr;
@@ -667,11 +663,12 @@
       document.getElementById('cadastro-sucesso').style.display = 'block';
     } catch (err) {
       console.error(err);
-      mostrarErroCadastro(err.message?.includes('already registered') ? 'Este e-mail já está cadastrado. Tente fazer login.' : ('Erro: ' + (err.message || 'tente novamente.')));
+      mostrarErroCadastro('Erro: ' + (err.message || 'tente novamente.'));
     } finally {
       btn.disabled = false; btn.textContent = 'Enviar solicitação';
     }
   }
+
 
   /* ── GATE DE ACESSO — controla o que aparece na seção de prescrição ── */
   function mostrarEstadoGate(estado) {
@@ -680,43 +677,63 @@
     });
   }
 
+  let gatePollingInterval = null;
+
   async function checkAndRenderGate() {
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) { mostrarEstadoGate('gate-nao-logado'); return; }
+    if (!session) { mostrarEstadoGate('gate-nao-logado'); stopGatePolling(); return; }
 
     const user = session.user;
 
-    /* 1. Tenta achar solicitação vinculada a esta conta */
-    const { data: solic } = await sb.from('solicitacoes_cadastro')
-      .select('*').eq('auth_user_id', user.id)
-      .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+    /* 1. Verifica se já existe registro aprovado em veterinarios ou locais */
+    const { data: vet } = await sb.from('veterinarios').select('id, nome').eq('email', user.email).maybeSingle();
+    const { data: local } = vet ? { data: null } : await sb.from('locais').select('id, nome').eq('email', user.email).maybeSingle();
 
-    let status = solic?.status;
-
-    /* 2. Fallback — conta criada manualmente pelo admin antes desta feature existir */
-    if (!status) {
-      const { data: vet } = await sb.from('veterinarios').select('id').eq('email', user.email).maybeSingle();
-      const { data: local } = vet ? { data: null } : await sb.from('locais').select('id').eq('email', user.email).maybeSingle();
-      if (vet || local) status = 'aprovado';
+    if (vet || local) {
+      stopGatePolling();
+      mostrarEstadoGate('gate-aprovado');
+      const nomeExibicao = (vet?.nome || local?.nome || user.email);
+      document.getElementById('gate-user-badge').textContent = `— olá, ${nomeExibicao.split(' ')[0]}`;
+      return;
     }
 
-    if (status === 'aprovado') {
-      mostrarEstadoGate('gate-aprovado');
-      document.getElementById('gate-user-badge').textContent = `— logado como ${user.email}`;
-    } else if (status === 'rejeitado') {
+    /* 2. Não aprovado — verifica solicitação pelo e-mail */
+    const { data: solic } = await sb.from('solicitacoes_cadastro')
+      .select('status, motivo_rejeicao')
+      .eq('email', user.email)
+      .order('criado_em', { ascending: false })
+      .limit(1).maybeSingle();
+
+    if (solic?.status === 'rejeitado') {
+      stopGatePolling();
       document.getElementById('gate-motivo-rejeicao').textContent = solic?.motivo_rejeicao
         ? `Motivo: ${solic.motivo_rejeicao}` : 'Seu cadastro não foi aprovado. Entre em contato para mais informações.';
       mostrarEstadoGate('gate-rejeitado');
     } else {
       mostrarEstadoGate('gate-pendente');
+      startGatePolling();
     }
   }
 
+  function startGatePolling() {
+    if (gatePollingInterval) return;
+    gatePollingInterval = setInterval(() => checkAndRenderGate(), 15000);
+  }
+  function stopGatePolling() {
+    if (gatePollingInterval) { clearInterval(gatePollingInterval); gatePollingInterval = null; }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkAndRenderGate();
+  });
+
   async function vetLogoutGate() {
+    stopGatePolling();
     await sb.auth.signOut();
     mostrarEstadoGate('gate-nao-logado');
     showToast('Você saiu da sua conta.');
   }
+
 
   /* ── MEDICAMENTOS (linhas dinâmicas) ── */
   function addMed() {
@@ -1008,6 +1025,19 @@
   setTimeout(() => { document.getElementById('wpp-btn').style.opacity = '1'; }, 3000);
 
   loadOptions().then(() => checkAndRenderGate());
+
+  /* Fecha modais com Escape — garante que Delete nos campos não propague para fechar o modal */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (document.getElementById('modal-cadastro').classList.contains('open')) { closeSolicitarCadastro(); return; }
+      if (document.getElementById('login-modal').classList.contains('open')) { closeLogin(); return; }
+    }
+    /* Impede que Delete/Backspace nos inputs do modal de cadastro propague para eventos globais */
+    if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.closest && e.target.closest('#modal-cadastro')) {
+      e.stopPropagation();
+    }
+  });
+
 </script>
 </body>
 </html>

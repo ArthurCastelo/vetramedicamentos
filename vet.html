@@ -228,15 +228,16 @@ async function initVet(user) {
      (foi criado justamente na aprovação). Se não, verifica a solicitação pendente/rejeitada */
   if (!vetData) {
     const { data: solic } = await sb.from('solicitacoes_cadastro')
-      .select('*').eq('auth_user_id', user.id)
+      .select('status, motivo_rejeicao')
+      .eq('email', user.email)
       .order('criado_em', { ascending: false }).limit(1).maybeSingle();
 
     if (!solic || solic.status === 'pendente') {
-      mostrarGateBloqueado('pendente');
+      mostrarGateBloqueado('pendente', null, user);
       return;
     }
     if (solic.status === 'rejeitado') {
-      mostrarGateBloqueado('rejeitado', solic.motivo_rejeicao);
+      mostrarGateBloqueado('rejeitado', solic.motivo_rejeicao, null);
       return;
     }
   }
@@ -251,7 +252,42 @@ async function initVet(user) {
   await carregarMinhasPrescricoes(user.email, vetData);
 }
 
-function mostrarGateBloqueado(estado, motivo) {
+let vetPollingInterval = null;
+function startVetPolling(user) {
+  if (vetPollingInterval) return;
+  vetPollingInterval = setInterval(async () => {
+    const { data: vet } = await sb.from('veterinarios').select('*').eq('email', user.email).maybeSingle();
+    const { data: local } = vet ? { data: null } : await sb.from('locais').select('*').eq('email', user.email).maybeSingle();
+    if (vet || local) {
+      clearInterval(vetPollingInterval); vetPollingInterval = null;
+      document.getElementById('vet-gate-bloqueado').style.display = 'none';
+      document.getElementById('vet-conteudo-normal').style.display = 'block';
+      document.getElementById('user-nome').textContent = vet?.nome || local?.nome || user.email;
+      document.getElementById('welcome-title').textContent = `Olá, ${(vet?.nome || local?.nome || user.email).split(' ')[0]}! 👋`;
+      await carregarMinhasPrescricoes(user.email, vet || null);
+    }
+  }, 15000);
+}
+
+document.addEventListener('visibilitychange', async () => {
+  if (!document.hidden) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      const { data: vet } = await sb.from('veterinarios').select('*').eq('email', session.user.email).maybeSingle();
+      const { data: local } = vet ? { data: null } : await sb.from('locais').select('*').eq('email', session.user.email).maybeSingle();
+      if ((vet || local) && document.getElementById('vet-gate-bloqueado').style.display !== 'none') {
+        clearInterval(vetPollingInterval); vetPollingInterval = null;
+        document.getElementById('vet-gate-bloqueado').style.display = 'none';
+        document.getElementById('vet-conteudo-normal').style.display = 'block';
+        document.getElementById('user-nome').textContent = vet?.nome || local?.nome || session.user.email;
+        document.getElementById('welcome-title').textContent = `Olá, ${(vet?.nome || local?.nome || session.user.email).split(' ')[0]}! 👋`;
+        await carregarMinhasPrescricoes(session.user.email, vet || null);
+      }
+    }
+  }
+});
+
+function mostrarGateBloqueado(estado, motivo, user) {
   document.getElementById('vet-conteudo-normal').style.display = 'none';
   document.getElementById('vet-gate-bloqueado').style.display = 'block';
   if (estado === 'rejeitado') {
@@ -262,6 +298,7 @@ function mostrarGateBloqueado(estado, motivo) {
     document.getElementById('vet-gate-icon').textContent = '⏳';
     document.getElementById('vet-gate-titulo').textContent = 'Cadastro em análise';
     document.getElementById('vet-gate-texto').textContent = 'Recebemos sua solicitação e nossa equipe está analisando os dados. Você terá acesso assim que for aprovado.';
+    if (user) startVetPolling(user);
   }
 }
 

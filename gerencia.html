@@ -1805,14 +1805,39 @@ function renderSolicitacoes() {
     const docLabel = s.tipo === 'veterinario'
       ? `CRMV ${s.crmv || '—'} · CPF ${s.cpf || '—'}`
       : `CNPJ ${s.cnpj || '—'}`;
+    const usernameLabel = s.username ? `👤 <strong>${s.username}</strong>` : '—';
     const statusBadge = s.status === 'pendente' ? '<span class="badge badge-orange">Pendente</span>'
       : s.status === 'aprovado' ? '<span class="badge badge-green">Aprovada</span>'
       : '<span class="badge badge-gray">Rejeitada</span>';
-    const acoes = s.status === 'pendente' ? `
-      <div class="presc-actions">
-        <button class="btn btn-primary btn-sm" onclick="aprovarSolicitacao('${s.id}')">✓ Aprovar</button>
-        <button class="btn btn-danger btn-sm" onclick="rejeitarSolicitacao('${s.id}')">✕ Rejeitar</button>
-      </div>` : (s.motivo_rejeicao ? `<div style="font-size:12px;color:var(--gray-mid);margin-top:6px">Motivo: ${s.motivo_rejeicao}</div>` : '');
+
+    /* Botão de WhatsApp gerado após aprovação — mensagem pré-definida */
+    let acoes = '';
+    if (s.status === 'pendente') {
+      acoes = `
+        <div class="presc-actions" style="margin-top:8px">
+          <button class="btn btn-primary btn-sm" onclick="aprovarSolicitacao('${s.id}')">✓ Aprovar</button>
+          <button class="btn btn-danger btn-sm" onclick="rejeitarSolicitacao('${s.id}')">✕ Rejeitar</button>
+        </div>`;
+    } else if (s.status === 'aprovado') {
+      const username = s.username || '';
+      const nome = s.nome || '';
+      const tel = (s.telefone || '').replace(/\D/g, '');
+      const msg = encodeURIComponent(
+        `Olá ${nome}! 🎉\n\nSeu cadastro na VETRA Distribuidora foi *aprovado*!\n\n` +
+        `Para enviar suas prescrições, acesse o site e clique em *"Sou Veterinário"* (ou *"Funcionários"*) e faça login com:\n\n` +
+        `👤 Usuário: *${username}*\n🔑 Senha: a que você cadastrou\n\n` +
+        `Qualquer dúvida estamos à disposição! 🐾`
+      );
+      const wppLink = tel ? `https://wa.me/55${tel}?text=${msg}` : `https://wa.me/?text=${msg}`;
+      acoes = `
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-sm" style="background:#25D366;color:white;text-decoration:none" href="${wppLink}" target="_blank">
+            💬 Enviar acesso pelo WhatsApp
+          </a>
+        </div>`;
+    } else if (s.motivo_rejeicao) {
+      acoes = `<div style="font-size:12px;color:var(--gray-mid);margin-top:6px">Motivo: ${s.motivo_rejeicao}</div>`;
+    }
 
     return `
     <div class="presc-card ${s.status === 'pendente' ? 'pendente' : ''}">
@@ -1823,8 +1848,9 @@ function renderSolicitacoes() {
           ${statusBadge}
           <span class="badge badge-blue">📍 ${s.bairros?.nome || '—'}</span>
         </div>
-        <div style="font-size:12px;color:var(--gray-mid);margin-bottom:5px">${tipoLabel} · ${docLabel}</div>
-        <div class="presc-tel">📞 ${s.telefone || '—'} · ✉️ ${s.email}</div>
+        <div style="font-size:12px;color:var(--gray-mid);margin-bottom:4px">${tipoLabel} · ${docLabel}</div>
+        <div style="font-size:12px;margin-bottom:4px">${usernameLabel}</div>
+        <div class="presc-tel">📞 ${s.telefone || '—'}</div>
         <div class="presc-time">⏱ ${formatDate(s.criado_em)}</div>
         ${acoes}
       </div>
@@ -1835,55 +1861,31 @@ function renderSolicitacoes() {
 async function aprovarSolicitacao(id) {
   const s = allSolicitacoes.find(x => x.id === id);
   if (!s) return;
-  if (!confirm(`Aprovar o cadastro de "${s.nome}"? Isso vai criar a conta de acesso e o registro de ${s.tipo === 'veterinario' ? 'veterinário' : 'petshop'} no sistema.`)) return;
+  if (!confirm(`Aprovar o cadastro de "${s.nome}"?\n\nIsso vai criar a conta de acesso usando a senha que ele definiu.`)) return;
+
+  const btn = document.querySelector(`[onclick="aprovarSolicitacao('${id}')"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Aprovando...'; }
 
   try {
-    /* Cria a conta Auth com a senha salva na solicitação */
-    let authUserId = s.auth_user_id;
-    if (!authUserId && s.senha_provisoria) {
-      const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
-        email: s.email,
-        password: s.senha_provisoria
-      });
-      if (signUpErr) {
-        if (signUpErr.message?.includes('already registered')) {
-          /* Conta já existe — tenta buscar pelo e-mail (pode ter sido criada antes) */
-          showToast('⚠️ E-mail já tem conta — vinculando cadastro existente...');
-        } else {
-          throw signUpErr;
-        }
-      } else {
-        authUserId = signUpData?.user?.id || null;
-      }
-    }
+    /* Busca o token do admin logado para autorizar a function */
+    const { data: { session } } = await sb.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Sessão expirada — faça login novamente.');
 
-    /* Cria o registro de veterinário ou petshop */
-    if (s.tipo === 'veterinario') {
-      const { error } = await sb.from('veterinarios').insert({
-        nome: s.nome, email: s.email, telefone: s.telefone,
-        crmv: s.crmv, bairro_id: s.bairro_id,
-        auth_user_id: authUserId, categoria: 'fixo', ativo: true
-      });
-      if (error) throw error;
-    } else {
-      const { error } = await sb.from('locais').insert({
-        nome: s.nome, email: s.email, telefone: s.telefone,
-        cnpj: s.cnpj, bairro_id: s.bairro_id,
-        auth_user_id: authUserId, ativo: true
-      });
-      if (error) throw error;
-    }
+    /* Chama a Netlify Function que usa service_role key (sem rate limit de e-mail) */
+    const resp = await fetch('/.netlify/functions/aprovar-cadastro', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ solicitacaoId: id, adminUserId: currentUser?.id })
+    });
 
-    /* Atualiza a solicitação */
-    const { error: updErr } = await sb.from('solicitacoes_cadastro').update({
-      status: 'aprovado',
-      auth_user_id: authUserId,
-      analisado_por: currentUser?.id || null,
-      analisado_em: new Date().toISOString()
-    }).eq('id', id);
-    if (updErr) throw updErr;
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || 'Erro ao aprovar.');
 
-    showToast(`✅ ${s.nome} foi aprovado(a)! Conta criada com sucesso.`);
+    showToast(`✅ ${s.nome} aprovado(a)!`);
     await loadSolicitacoes();
     await loadVets();
     await loadLocais();
@@ -1891,6 +1893,7 @@ async function aprovarSolicitacao(id) {
   } catch (err) {
     console.error(err);
     showToast('Erro ao aprovar: ' + (err.message || 'tente novamente'));
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Aprovar'; }
   }
 }
 

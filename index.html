@@ -454,11 +454,11 @@
     <button class="modal-close" onclick="closeLogin()">×</button>
     <div style="display:flex;justify-content:center;margin-bottom:1.5rem"><div style="width:52px;height:52px;background:var(--green);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px">🩺</div></div>
     <div class="modal-title">Área do Veterinário</div>
-    <div class="modal-sub">Acesse com seu e-mail e senha cadastrados pela VETRA</div>
-    <div class="login-error" id="login-error">E-mail ou senha incorretos. Tente novamente.</div>
+    <div class="modal-sub">Acesse com seu usuário e senha criados pela VETRA após aprovação</div>
+    <div class="login-error" id="login-error">Usuário ou senha incorretos. Tente novamente.</div>
     <div class="form-group">
-      <label class="form-label">E-mail</label>
-      <input class="form-input" type="email" id="login-email" placeholder="seu@email.com" />
+      <label class="form-label">Usuário</label>
+      <input class="form-input" type="text" id="login-email" placeholder="ex: arthur.castelo" autocomplete="username" autocapitalize="none" />
     </div>
     <div class="form-group">
       <label class="form-label">Senha</label>
@@ -495,7 +495,11 @@
 
       <div class="form-group"><label class="form-label">Telefone *</label><input class="form-input" type="tel" id="cad-tel" placeholder="(98) 9 0000-0000" inputmode="numeric" maxlength="16" oninput="mascaraTelefone(this)" /></div>
       <div class="form-group"><label class="form-label">Bairro *</label><select class="form-select" id="cad-bairro"><option value="">Selecione...</option></select></div>
-      <div class="form-group"><label class="form-label">E-mail *</label><input class="form-input" type="email" id="cad-email" /></div>
+      <div class="form-group">
+        <label class="form-label">Nome de usuário desejado *</label>
+        <input class="form-input" type="text" id="cad-username" placeholder="ex: arthur.castelo" autocapitalize="none" autocorrect="off" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9._-]/g,'')" />
+        <div style="font-size:11px;color:var(--gray-mid);margin-top:4px">Use letras minúsculas, números, ponto ou traço. Sem espaços.</div>
+      </div>
       <div class="form-group"><label class="form-label">Senha *</label><input class="form-input" type="password" id="cad-senha" placeholder="Mínimo 6 caracteres" /></div>
 
       <button class="btn btn-primary" id="cad-submit-btn" style="width:100%;justify-content:center;margin-top:.5rem;padding:14px" onclick="enviarSolicitacaoCadastro()">Enviar solicitação</button>
@@ -572,9 +576,11 @@
   function openLogin() { document.getElementById('login-modal').classList.add('open'); document.getElementById('login-error').classList.remove('show'); }
   function closeLogin() { document.getElementById('login-modal').classList.remove('open'); }
   async function doLogin() {
-    const email = document.getElementById('login-email').value.trim();
+    const usernameRaw = document.getElementById('login-email').value.trim().toLowerCase();
     const senha = document.getElementById('login-senha').value;
-    if (!email || !senha) { showToast('Preencha e-mail e senha.'); return; }
+    if (!usernameRaw || !senha) { showToast('Preencha usuário e senha.'); return; }
+    // Converte username para o formato de e-mail interno usado pelo Supabase Auth
+    const email = usernameRaw.includes('@') ? usernameRaw : `${usernameRaw}@vetra.local`;
     try {
       const { error } = await sb.auth.signInWithPassword({ email, password: senha });
       if (error) throw error;
@@ -619,7 +625,7 @@
     const nome = document.getElementById('cad-nome').value.trim();
     const tel = document.getElementById('cad-tel').value.trim();
     const bairroId = document.getElementById('cad-bairro').value;
-    const email = document.getElementById('cad-email').value.trim();
+    const username = document.getElementById('cad-username').value.trim().toLowerCase();
     const senha = document.getElementById('cad-senha').value;
     const crmv = document.getElementById('cad-crmv').value.trim();
     const cpf = document.getElementById('cad-cpf').value.trim();
@@ -630,7 +636,8 @@
     if (!nome) return mostrarErroCadastro('Digite o nome.');
     if (!telefoneValido(tel)) return mostrarErroCadastro('Telefone inválido. Use o formato (98) 9 0000-0000.');
     if (!bairroId) return mostrarErroCadastro('Selecione o bairro.');
-    if (!email || !email.includes('@') || !email.includes('.')) return mostrarErroCadastro('Digite um e-mail válido.');
+    if (!username || username.length < 3) return mostrarErroCadastro('Digite um nome de usuário com pelo menos 3 caracteres.');
+    if (!/^[a-z0-9._-]+$/.test(username)) return mostrarErroCadastro('Usuário inválido. Use apenas letras minúsculas, números, ponto ou traço.');
     if (!senha || senha.length < 6) return mostrarErroCadastro('A senha precisa ter no mínimo 6 caracteres.');
 
     if (tipoCadastroAtual === 'veterinario') {
@@ -644,13 +651,11 @@
     btn.disabled = true; btn.textContent = 'Enviando...';
 
     try {
-      /* NÃO criamos a conta Auth aqui — evita o rate limit de e-mails do Supabase.
-         A conta será criada pelo admin no momento da aprovação (gerencia.html).
-         A senha provisória fica salva para o admin usar na criação da conta Auth. */
       const { error: insErr } = await sb.from('solicitacoes_cadastro').insert({
         tipo: tipoCadastroAtual,
-        nome, email, telefone: tel,
+        nome, telefone: tel,
         bairro_id: bairroId,
+        username,
         crmv: tipoCadastroAtual === 'veterinario' ? crmv : null,
         cpf: tipoCadastroAtual === 'veterinario' ? cpf : null,
         cnpj: tipoCadastroAtual === 'petshop' ? cnpj : null,

@@ -116,9 +116,9 @@
       <div><div class="login-logo-txt">VETRA <span>DISTRIBUIDORA</span></div><div style="font-size:11px;color:var(--gray-mid)">Área do Veterinário</div></div>
     </div>
     <div class="login-title">Acesse sua conta</div>
-    <div class="login-sub">Entre com o e-mail e senha cadastrados pela VETRA</div>
-    <div class="login-err" id="login-err">E-mail ou senha incorretos.</div>
-    <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="vet-email-login" placeholder="seu@email.com" /></div>
+    <div class="login-sub">Entre com seu usuário e senha criados após aprovação</div>
+    <div class="login-err" id="login-err">Usuário ou senha incorretos.</div>
+    <div class="form-group"><label class="form-label">Usuário</label><input class="form-input" type="text" id="vet-email-login" placeholder="ex: arthur.castelo" autocapitalize="none" autocorrect="off" /></div>
     <div class="form-group"><label class="form-label">Senha</label><input class="form-input" type="password" id="vet-senha-login" placeholder="••••••••" onkeydown="if(event.key==='Enter')vetLogin()" /></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;margin-top:.25rem" onclick="vetLogin()" id="vet-login-btn">Entrar</button>
     <div style="text-align:center;margin-top:1rem;font-size:13px;color:var(--gray-mid)">
@@ -199,9 +199,10 @@ let vetAtual = null;
 
 /* ════════════ LOGIN ════════════ */
 async function vetLogin() {
-  const email = document.getElementById('vet-email-login').value.trim();
+  const usernameRaw = document.getElementById('vet-email-login').value.trim().toLowerCase();
   const senha = document.getElementById('vet-senha-login').value;
-  if (!email || !senha) { showLoginErr('Preencha e-mail e senha.'); return; }
+  if (!usernameRaw || !senha) { showLoginErr('Preencha usuário e senha.'); return; }
+  const email = usernameRaw.includes('@') ? usernameRaw : `${usernameRaw}@vetra.local`;
   const btn = document.getElementById('vet-login-btn');
   btn.innerHTML = '<span class="spinner"></span> Entrando...'; btn.disabled = true;
   try {
@@ -210,7 +211,7 @@ async function vetLogin() {
     hideLogin();
     await initVet(data.user);
   } catch (e) {
-    showLoginErr('E-mail ou senha incorretos.');
+    showLoginErr('Usuário ou senha incorretos.');
     btn.textContent = 'Entrar'; btn.disabled = false;
   }
 }

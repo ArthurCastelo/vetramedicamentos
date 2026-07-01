@@ -147,6 +147,14 @@
   </header>
 
   <div class="content">
+    <div id="vet-gate-bloqueado" style="display:none" class="no-match-card" style="text-align:center;padding:2.5rem 1.5rem">
+      <div id="vet-gate-icon" style="font-size:3rem;margin-bottom:1rem">⏳</div>
+      <strong id="vet-gate-titulo" style="font-size:1.1rem;display:block;margin-bottom:.5rem">Cadastro em análise</strong>
+      <p id="vet-gate-texto" style="font-size:14px;color:var(--gray-dark);line-height:1.6">Recebemos sua solicitação e nossa equipe está analisando os dados.</p>
+      <a class="btn btn-primary" style="margin-top:1.25rem;justify-content:center;display:inline-flex" href="https://wa.me/5598330168861?text=Ol%C3%A1!%20Gostaria%20de%20saber%20sobre%20o%20status%20do%20meu%20cadastro." target="_blank">Falar com a VETRA no WhatsApp</a>
+    </div>
+
+    <div id="vet-conteudo-normal">
     <div class="welcome-card">
       <div class="welcome-title" id="welcome-title">Olá! 👋</div>
       <div class="welcome-sub">Aqui estão as prescrições que você enviou para a VETRA.</div>
@@ -175,6 +183,8 @@
 
     <div class="section-title">📋 Minhas prescrições</div>
     <div id="minhas-prescricoes"></div>
+    </div>
+    <!-- fim vet-conteudo-normal -->
   </div>
 </div>
 
@@ -214,11 +224,45 @@ async function initVet(user) {
   const { data: vetData } = await sb.from('veterinarios').select('*').eq('email', user.email).maybeSingle();
   vetAtual = vetData;
 
+  /* Checa status de aprovação: se existe cadastro em veterinarios, está aprovado
+     (foi criado justamente na aprovação). Se não, verifica a solicitação pendente/rejeitada */
+  if (!vetData) {
+    const { data: solic } = await sb.from('solicitacoes_cadastro')
+      .select('*').eq('auth_user_id', user.id)
+      .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+
+    if (!solic || solic.status === 'pendente') {
+      mostrarGateBloqueado('pendente');
+      return;
+    }
+    if (solic.status === 'rejeitado') {
+      mostrarGateBloqueado('rejeitado', solic.motivo_rejeicao);
+      return;
+    }
+  }
+
+  document.getElementById('vet-gate-bloqueado').style.display = 'none';
+  document.getElementById('vet-conteudo-normal').style.display = 'block';
+
   document.getElementById('user-nome').textContent = vetData?.nome || user.email;
   document.getElementById('user-crmv').textContent = vetData?.crmv ? 'CRMV-MA ' + vetData.crmv : user.email;
   document.getElementById('welcome-title').textContent = `Olá, ${(vetData?.nome || user.email).split(' ')[0]}! 👋`;
 
   await carregarMinhasPrescricoes(user.email, vetData);
+}
+
+function mostrarGateBloqueado(estado, motivo) {
+  document.getElementById('vet-conteudo-normal').style.display = 'none';
+  document.getElementById('vet-gate-bloqueado').style.display = 'block';
+  if (estado === 'rejeitado') {
+    document.getElementById('vet-gate-icon').textContent = '❌';
+    document.getElementById('vet-gate-titulo').textContent = 'Cadastro não aprovado';
+    document.getElementById('vet-gate-texto').textContent = motivo ? `Motivo: ${motivo}` : 'Seu cadastro não foi aprovado. Entre em contato para mais informações.';
+  } else {
+    document.getElementById('vet-gate-icon').textContent = '⏳';
+    document.getElementById('vet-gate-titulo').textContent = 'Cadastro em análise';
+    document.getElementById('vet-gate-texto').textContent = 'Recebemos sua solicitação e nossa equipe está analisando os dados. Você terá acesso assim que for aprovado.';
+  }
 }
 
 async function carregarMinhasPrescricoes(email, vetData) {

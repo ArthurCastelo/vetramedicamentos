@@ -239,6 +239,7 @@
     <div class="nav-section">
       <div class="nav-label">Principal</div>
       <a class="nav-item active" href="#" onclick="showPanel('dashboard',this)"><span class="icon">📊</span> Dashboard</a>
+      <a class="nav-item" href="#" onclick="showPanel('solicitacoes',this)"><span class="icon">📨</span> Solicitações<span class="nav-badge" id="badge-solic" style="display:none">0</span></a>
       <a class="nav-item" href="#" onclick="showPanel('prescricoes',this)"><span class="icon">📋</span> Prescrições<span class="nav-badge" id="badge-presc">0</span></a>
       <a class="nav-item" href="#" onclick="showPanel('analise',this)"><span class="icon">📈</span> Análise Detalhada</a>
     </div>
@@ -309,6 +310,17 @@
         </div>
         <div id="dash-presc" style="padding:.5rem 0"></div>
       </div>
+    </div>
+
+    <!-- ══ SOLICITAÇÕES DE CADASTRO ══ -->
+    <div class="panel" id="panel-solicitacoes">
+      <div class="filter-bar">
+        <button class="filter-pill active" onclick="filterSolic('pendente',this)">Pendentes</button>
+        <button class="filter-pill" onclick="filterSolic('aprovado',this)">Aprovadas</button>
+        <button class="filter-pill" onclick="filterSolic('rejeitado',this)">Rejeitadas</button>
+        <button class="filter-pill" onclick="filterSolic('',this)">Todas</button>
+      </div>
+      <div id="solic-list"></div>
     </div>
 
     <!-- ══ PRESCRIÇÕES ══ -->
@@ -710,7 +722,7 @@ function initAdmin(user) {
 }
 
 /* ════════════ NAVEGAÇÃO ════════════ */
-const panelTitles = { dashboard:'Dashboard', prescricoes:'Prescrições', analise:'Análise Detalhada', veterinarios:'Veterinários', locais:'Petshops & Clínicas', medicamentos:'Catálogo de Medicamentos', bairros:'Bairros da Grande São Luís' };
+const panelTitles = { dashboard:'Dashboard', solicitacoes:'Solicitações de Cadastro', prescricoes:'Prescrições', analise:'Análise Detalhada', veterinarios:'Veterinários', locais:'Petshops & Clínicas', medicamentos:'Catálogo de Medicamentos', bairros:'Bairros da Grande São Luís' };
 function showPanel(id, el) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + id).classList.add('active');
@@ -719,6 +731,7 @@ function showPanel(id, el) {
   document.getElementById('topbar-title').textContent = panelTitles[id] || id;
   if (id === 'prescricoes') renderPresc();
   if (id === 'analise') renderCharts();
+  if (id === 'solicitacoes') renderSolicitacoes();
 }
 
 /* ════════════ CARREGAMENTO GERAL ════════════ */
@@ -726,7 +739,7 @@ async function loadAll() {
   await loadBairros();
   await loadMedicamentos();
   await loadLocais();
-  await Promise.all([ loadPrescricoes(), loadVets() ]);
+  await Promise.all([ loadPrescricoes(), loadVets(), loadSolicitacoes() ]);
 }
 
 /* ════════════ BAIRROS ════════════ */
@@ -804,15 +817,18 @@ function renderMedTable() {
       <td><button class="btn btn-outline btn-sm" onclick='openMedModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>Editar</button></td>
     </tr>`).join('');
 }
-function openMedModal(med) {
+let medModalContext = null; // { prescMedId, prescricaoId } — setado quando o modal é aberto a partir da tela de confirmação
+
+function openMedModal(med, prefillNome, context) {
   document.getElementById('modal-med').classList.add('open');
   document.getElementById('med-id').value = '';
-  document.getElementById('med-nome').value = '';
+  document.getElementById('med-nome').value = prefillNome || '';
   document.getElementById('med-apres').value = '';
   document.getElementById('med-cat').value = '';
   document.getElementById('med-ativo').checked = true;
   document.getElementById('med-delete-btn').style.display = 'none';
   document.getElementById('med-modal-title').textContent = '💊 Novo Medicamento';
+  medModalContext = context || null;
   if (med && med.id) {
     document.getElementById('med-id').value = med.id;
     document.getElementById('med-nome').value = med.nome;
@@ -823,16 +839,36 @@ function openMedModal(med) {
     document.getElementById('med-modal-title').textContent = '💊 Editar Medicamento';
   }
 }
-function closeMedModal() { document.getElementById('modal-med').classList.remove('open'); }
+function closeMedModal() { document.getElementById('modal-med').classList.remove('open'); medModalContext = null; }
 async function salvarMed() {
   const id = document.getElementById('med-id').value;
   const nome = document.getElementById('med-nome').value.trim();
   if (!nome) { showToast('Digite o nome do medicamento.'); return; }
   const payload = { nome, apresentacao: document.getElementById('med-apres').value.trim(), categoria: document.getElementById('med-cat').value.trim(), ativo: document.getElementById('med-ativo').checked };
-  let error;
-  if (id) ({ error } = await sb.from('medicamentos').update(payload).eq('id', id));
-  else ({ error } = await sb.from('medicamentos').insert(payload));
+  let error, novoId = id;
+  if (id) {
+    ({ error } = await sb.from('medicamentos').update(payload).eq('id', id));
+  } else {
+    const { data: inserted, error: insErr } = await sb.from('medicamentos').insert(payload).select().single();
+    error = insErr;
+    if (inserted) novoId = inserted.id;
+  }
   if (error) { showToast('Erro: ' + error.message); return; }
+
+  /* Se o cadastro veio do fluxo de confirmação de medicamentos, vincula
+     automaticamente o medicamento recém-criado à prescricao_medicamentos
+     e reabre o modal de detalhes já atualizado */
+  if (medModalContext && medModalContext.prescMedId && novoId) {
+    await sb.from('prescricao_medicamentos').update({ medicamento_id: novoId, nome_livre: null }).eq('id', medModalContext.prescMedId);
+    const prescIdParaReabrir = medModalContext.prescricaoId;
+    closeMedModal();
+    await loadMedicamentos();
+    await loadPrescricoes();
+    showToast('✅ Medicamento cadastrado e vinculado à prescrição!');
+    if (prescIdParaReabrir) verDetalhes(prescIdParaReabrir);
+    return;
+  }
+
   closeMedModal(); showToast(id ? '✅ Medicamento atualizado!' : '✅ Medicamento cadastrado!');
   await loadMedicamentos();
 }
@@ -1204,7 +1240,7 @@ function verDetalhes(id) {
   const temEstoque  = meds.filter(m =>  m.medicamento_id);
   const semEstoque  = meds.filter(m => !m.medicamento_id);
 
-  function renderMedItem(m) {
+  function renderMedItem(m, semCatalogo) {
     const nome = medNome(m);
     const dosagem = m.dosagem ? `<div style="font-size:11px;color:var(--gray-mid);margin-top:2px">${m.dosagem}</div>` : '';
     const badge = m.origem === 'ia'
@@ -1213,6 +1249,20 @@ function verDetalhes(id) {
     const borda = m.confirmado === true  ? 'border:2px solid var(--green-mid);background:var(--green-pale)' :
                   m.confirmado === false ? 'border:2px solid var(--orange);background:var(--orange-light)' :
                   'border:1.5px solid var(--border-col)';
+
+    if (semCatalogo) {
+      /* Sem match no catálogo: checkbox desabilitado + botão para cadastrar primeiro */
+      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;${borda};opacity:.9">
+        <input type="checkbox" disabled title="Cadastre este medicamento no catálogo antes de confirmar"
+          style="margin-top:3px;width:16px;height:16px;flex-shrink:0;cursor:not-allowed" />
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${nome}</div>
+          ${dosagem}${badge}
+          <button class="btn btn-outline btn-sm" style="margin-top:6px;padding:4px 10px;font-size:11px" onclick='openMedModal(null, ${JSON.stringify(nome)}, {prescMedId:"${m.id}", prescricaoId:"${p.id}"})'>+ Cadastrar no catálogo</button>
+        </div>
+      </div>`;
+    }
+
     return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;${borda}">
       <input type="checkbox" data-med-id="${m.id}" ${m.confirmado === true ? 'checked' : ''}
         style="margin-top:3px;width:16px;height:16px;flex-shrink:0" />
@@ -1221,10 +1271,10 @@ function verDetalhes(id) {
   }
 
   document.getElementById('det-meds-tem').innerHTML = temEstoque.length
-    ? temEstoque.map(renderMedItem).join('')
+    ? temEstoque.map(m => renderMedItem(m, false)).join('')
     : '<div style="font-size:12px;color:var(--gray-mid);padding:8px">Nenhum medicamento desta prescrição está no catálogo da VETRA.</div>';
   document.getElementById('det-meds-naotem').innerHTML = semEstoque.length
-    ? semEstoque.map(renderMedItem).join('')
+    ? semEstoque.map(m => renderMedItem(m, true)).join('') + '<div style="font-size:11px;color:var(--gray-mid);padding:4px 2px">⚠️ Cadastre no catálogo para poder confirmar estes itens.</div>'
     : '<div style="font-size:12px;color:var(--gray-mid);padding:8px">Todos os medicamentos estão no catálogo da VETRA.</div>';
 
   document.getElementById('modal-det').classList.add('open');
@@ -1235,9 +1285,10 @@ async function salvarConfirmacaoMedicamentos() {
   const btn = document.getElementById('btn-salvar-confirmacao');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Salvando...';
 
-  const checkboxes = document.querySelectorAll('#det-confirmacao input[type="checkbox"]');
+  const checkboxes = document.querySelectorAll('#det-confirmacao input[type="checkbox"]:not([disabled])');
   let erros = 0;
   for (const cb of checkboxes) {
+    if (!cb.dataset.medId) continue;
     const { error } = await sb.from('prescricao_medicamentos').update({
       confirmado: cb.checked,
       confirmado_por: currentUser?.id || null,
@@ -1713,6 +1764,123 @@ function renderCharts() {
     data: { labels: labelsCategorias, datasets: [{ data: dataCategorias, backgroundColor: pieColors, borderWidth: 2, borderColor: '#FFFFFF' }] },
     options: pieBaseOptions(() => {})
   });
+}
+
+/* ════════════ SOLICITAÇÕES DE CADASTRO ════════════ */
+let allSolicitacoes = [];
+let currentSolicFilter = 'pendente';
+
+async function loadSolicitacoes() {
+  const { data, error } = await sb.from('solicitacoes_cadastro')
+    .select('*, bairros(nome)')
+    .order('criado_em', { ascending: false });
+  if (error) { console.error('Erro ao carregar solicitações:', error); return; }
+  allSolicitacoes = data || [];
+
+  const pendentes = allSolicitacoes.filter(s => s.status === 'pendente').length;
+  const badge = document.getElementById('badge-solic');
+  if (pendentes > 0) { badge.style.display = 'inline-flex'; badge.textContent = pendentes; }
+  else { badge.style.display = 'none'; }
+}
+
+function filterSolic(status, btn) {
+  currentSolicFilter = status;
+  document.querySelectorAll('#panel-solicitacoes .filter-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  renderSolicitacoes();
+}
+
+function renderSolicitacoes() {
+  let lista = allSolicitacoes;
+  if (currentSolicFilter) lista = lista.filter(s => s.status === currentSolicFilter);
+
+  const container = document.getElementById('solic-list');
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">📨</div><div class="empty-title">Nenhuma solicitação ${currentSolicFilter ? 'com esse status' : ''}</div></div>`;
+    return;
+  }
+
+  container.innerHTML = lista.map(s => {
+    const tipoLabel = s.tipo === 'veterinario' ? '🩺 Veterinário' : '🏪 Petshop/Cliente';
+    const docLabel = s.tipo === 'veterinario'
+      ? `CRMV ${s.crmv || '—'} · CPF ${s.cpf || '—'}`
+      : `CNPJ ${s.cnpj || '—'}`;
+    const statusBadge = s.status === 'pendente' ? '<span class="badge badge-orange">Pendente</span>'
+      : s.status === 'aprovado' ? '<span class="badge badge-green">Aprovada</span>'
+      : '<span class="badge badge-gray">Rejeitada</span>';
+    const acoes = s.status === 'pendente' ? `
+      <div class="presc-actions">
+        <button class="btn btn-primary btn-sm" onclick="aprovarSolicitacao('${s.id}')">✓ Aprovar</button>
+        <button class="btn btn-danger btn-sm" onclick="rejeitarSolicitacao('${s.id}')">✕ Rejeitar</button>
+      </div>` : (s.motivo_rejeicao ? `<div style="font-size:12px;color:var(--gray-mid);margin-top:6px">Motivo: ${s.motivo_rejeicao}</div>` : '');
+
+    return `
+    <div class="presc-card ${s.status === 'pendente' ? 'pendente' : ''}">
+      <div class="presc-avatar">${s.tipo === 'veterinario' ? '🩺' : '🏪'}</div>
+      <div class="presc-main">
+        <div class="presc-header">
+          <span class="presc-from">${s.nome}</span>
+          ${statusBadge}
+          <span class="badge badge-blue">📍 ${s.bairros?.nome || '—'}</span>
+        </div>
+        <div style="font-size:12px;color:var(--gray-mid);margin-bottom:5px">${tipoLabel} · ${docLabel}</div>
+        <div class="presc-tel">📞 ${s.telefone || '—'} · ✉️ ${s.email}</div>
+        <div class="presc-time">⏱ ${formatDate(s.criado_em)}</div>
+        ${acoes}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function aprovarSolicitacao(id) {
+  const s = allSolicitacoes.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`Aprovar o cadastro de "${s.nome}"? Isso vai criar o registro de ${s.tipo === 'veterinario' ? 'veterinário' : 'petshop'} no sistema.`)) return;
+
+  try {
+    if (s.tipo === 'veterinario') {
+      const { error } = await sb.from('veterinarios').insert({
+        nome: s.nome, email: s.email, telefone: s.telefone,
+        crmv: s.crmv, cpf: s.cpf, bairro_id: s.bairro_id,
+        auth_user_id: s.auth_user_id, categoria: 'fixo', ativo: true
+      });
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from('locais').insert({
+        nome: s.nome, email: s.email, telefone: s.telefone,
+        cnpj: s.cnpj, bairro_id: s.bairro_id,
+        auth_user_id: s.auth_user_id, ativo: true
+      });
+      if (error) throw error;
+    }
+
+    const { error: updErr } = await sb.from('solicitacoes_cadastro').update({
+      status: 'aprovado', analisado_por: currentUser?.id || null, analisado_em: new Date().toISOString()
+    }).eq('id', id);
+    if (updErr) throw updErr;
+
+    showToast(`✅ ${s.nome} foi aprovado(a)!`);
+    await loadSolicitacoes();
+    await loadVets();
+    await loadLocais();
+    renderSolicitacoes();
+  } catch (err) {
+    console.error(err);
+    showToast('Erro ao aprovar: ' + (err.message || 'tente novamente'));
+  }
+}
+
+async function rejeitarSolicitacao(id) {
+  const motivo = prompt('Motivo da rejeição (opcional, será mostrado ao solicitante):');
+  if (motivo === null) return; // cancelou
+  const { error } = await sb.from('solicitacoes_cadastro').update({
+    status: 'rejeitado', motivo_rejeicao: motivo || null,
+    analisado_por: currentUser?.id || null, analisado_em: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { showToast('Erro ao rejeitar: ' + error.message); return; }
+  showToast('Solicitação rejeitada.');
+  await loadSolicitacoes();
+  renderSolicitacoes();
 }
 
 /* ════════════ VETERINÁRIOS (CRUD) ════════════ */

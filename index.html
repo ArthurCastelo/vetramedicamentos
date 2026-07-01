@@ -101,6 +101,13 @@
     .prescricao-inner { display:grid; grid-template-columns:1fr 1.2fr; gap:4rem; align-items:start; }
     .presc-form-wrap { background:var(--gray-pale); border-radius:20px; padding:2.5rem; border:1px solid var(--gray-light); }
     .form-title { font-family:'Sora',sans-serif; font-size:1.3rem; font-weight:700; margin-bottom:1.75rem; }
+    .gate-card { text-align:center; padding:2rem 1rem; }
+    .gate-icon { font-size:3rem; margin-bottom:1rem; }
+    .gate-title { font-family:'Sora',sans-serif; font-size:1.2rem; font-weight:700; margin-bottom:.6rem; }
+    .gate-text { color:var(--gray-dark); font-size:14px; line-height:1.6; }
+    .tipo-toggle { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:1.25rem; }
+    .tipo-toggle button { padding:12px; border-radius:10px; border:1.5px solid var(--gray-light); background:var(--white); font-family:'DM Sans'; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s; }
+    .tipo-toggle button.active { border-color:var(--green); background:var(--green-pale); color:var(--green); }
     .form-group { margin-bottom:1.25rem; }
     .form-label { font-size:13px; font-weight:600; color:var(--gray-dark); margin-bottom:6px; display:block; }
     .form-input, .form-select { width:100%; padding:11px 16px; border:1.5px solid var(--gray-light); border-radius:var(--radius-sm); font-family:'DM Sans',sans-serif; font-size:14px; background:var(--white); color:var(--charcoal); transition:border .2s; outline:none; }
@@ -295,9 +302,41 @@
         </div>
       </div>
 
-      <div class="presc-form-wrap fade-in">
-        <div class="form-title">📋 Nova Prescrição</div>
-        <form id="presc-form" onsubmit="submitPrescricao(event)">
+      <div class="presc-form-wrap fade-in" id="presc-form-wrap">
+
+        <!-- Estado: não logado -->
+        <div id="gate-nao-logado" class="gate-card">
+          <div class="gate-icon">🔒</div>
+          <div class="gate-title">Área restrita a cadastrados</div>
+          <p class="gate-text">Para enviar prescrições, você precisa ter uma conta aprovada pela VETRA como veterinário(a) ou petshop parceiro.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:1.5rem">
+            <button class="btn btn-primary" style="justify-content:center" onclick="openLogin()">Já tenho cadastro — Entrar</button>
+            <button class="btn btn-outline" style="justify-content:center" onclick="openSolicitarCadastro()">Ainda não tenho conta — Solicitar cadastro</button>
+          </div>
+        </div>
+
+        <!-- Estado: aguardando aprovação -->
+        <div id="gate-pendente" class="gate-card" style="display:none">
+          <div class="gate-icon">⏳</div>
+          <div class="gate-title">Cadastro em análise</div>
+          <p class="gate-text">Recebemos sua solicitação e nossa equipe está analisando os dados. Você receberá acesso assim que for aprovado.</p>
+          <a class="btn btn-wpp" style="margin-top:1.5rem;justify-content:center" href="https://wa.me/5598330168861?text=Ol%C3%A1!%20Gostaria%20de%20saber%20sobre%20o%20status%20do%20meu%20cadastro." target="_blank">Falar com a VETRA no WhatsApp</a>
+          <button class="btn btn-outline" style="margin-top:10px;justify-content:center;width:100%" onclick="vetLogoutGate()">Sair</button>
+        </div>
+
+        <!-- Estado: rejeitado -->
+        <div id="gate-rejeitado" class="gate-card" style="display:none">
+          <div class="gate-icon">❌</div>
+          <div class="gate-title">Cadastro não aprovado</div>
+          <p class="gate-text" id="gate-motivo-rejeicao">Seu cadastro não foi aprovado. Entre em contato para mais informações.</p>
+          <a class="btn btn-wpp" style="margin-top:1.5rem;justify-content:center" href="https://wa.me/5598330168861?text=Ol%C3%A1!%20Gostaria%20de%20entender%20sobre%20meu%20cadastro." target="_blank">Falar com a VETRA no WhatsApp</a>
+          <button class="btn btn-outline" style="margin-top:10px;justify-content:center;width:100%" onclick="vetLogoutGate()">Sair</button>
+        </div>
+
+        <!-- Estado: aprovado — formulário real -->
+        <div id="gate-aprovado" style="display:none">
+          <div class="form-title">📋 Nova Prescrição <span id="gate-user-badge" style="font-size:12px;font-weight:500;color:var(--gray-mid)"></span></div>
+          <form id="presc-form" onsubmit="submitPrescricao(event)">
           <div class="form-group">
             <label class="form-label">Petshop / Clínica *</label>
             <input class="form-input" type="text" id="f-local" placeholder="Nome do estabelecimento" required />
@@ -351,6 +390,8 @@
           <button type="submit" id="submit-btn" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem;padding:14px">Enviar Prescrição</button>
         </form>
         <div class="success-msg" id="success-msg">✅ Prescrição enviada! Nossa equipe retornará em breve.</div>
+        </div>
+        <!-- fim gate-aprovado -->
       </div>
     </div>
   </div>
@@ -425,7 +466,46 @@
     </div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem;padding:14px" onclick="doLogin()">Entrar</button>
     <div style="text-align:center;margin-top:1rem;font-size:13px;color:var(--gray-mid)">
-      Sem cadastro? <a href="https://wa.me/5598330168861?text=Ol%C3%A1!%20Gostaria%20de%20criar%20minha%20conta%20de%20veterin%C3%A1rio%20na%20VETRA." target="_blank" style="color:var(--green);font-weight:600;text-decoration:none">Solicite pelo WhatsApp →</a>
+      Sem cadastro? <a href="#" onclick="closeLogin();openSolicitarCadastro();return false" style="color:var(--green);font-weight:600;text-decoration:none">Solicitar cadastro →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ MODAL SOLICITAR CADASTRO ════════ -->
+<div class="modal-overlay" id="modal-cadastro">
+  <div class="modal" style="max-width:460px">
+    <button class="modal-close" onclick="closeSolicitarCadastro()">×</button>
+
+    <div id="cadastro-form-wrap">
+      <div class="modal-title">Solicitar Cadastro</div>
+      <div class="modal-sub">Preencha seus dados. Nossa equipe analisa e libera seu acesso.</div>
+
+      <div class="tipo-toggle">
+        <button type="button" id="tipo-btn-vet" onclick="setTipoCadastro('veterinario')">🩺 Sou Veterinário(a)</button>
+        <button type="button" id="tipo-btn-petshop" onclick="setTipoCadastro('petshop')">🏪 Sou Petshop/Cliente</button>
+      </div>
+
+      <div class="login-error" id="cadastro-error"></div>
+
+      <div class="form-group"><label class="form-label" id="cad-nome-label">Nome completo</label><input class="form-input" type="text" id="cad-nome" /></div>
+
+      <div id="campo-crmv" class="form-group" style="display:none"><label class="form-label">CRMV *</label><input class="form-input" type="text" id="cad-crmv" placeholder="00000" inputmode="numeric" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')" /></div>
+      <div id="campo-cpf" class="form-group" style="display:none"><label class="form-label">CPF *</label><input class="form-input" type="text" id="cad-cpf" placeholder="000.000.000-00" inputmode="numeric" maxlength="14" oninput="mascaraCPF(this)" /></div>
+      <div id="campo-cnpj" class="form-group" style="display:none"><label class="form-label">CNPJ *</label><input class="form-input" type="text" id="cad-cnpj" placeholder="00.000.000/0000-00" inputmode="numeric" maxlength="18" oninput="mascaraCNPJ(this)" /></div>
+
+      <div class="form-group"><label class="form-label">Telefone *</label><input class="form-input" type="tel" id="cad-tel" placeholder="(98) 9 0000-0000" inputmode="numeric" maxlength="16" oninput="mascaraTelefone(this)" /></div>
+      <div class="form-group"><label class="form-label">Bairro *</label><select class="form-select" id="cad-bairro"><option value="">Selecione...</option></select></div>
+      <div class="form-group"><label class="form-label">E-mail *</label><input class="form-input" type="email" id="cad-email" /></div>
+      <div class="form-group"><label class="form-label">Senha *</label><input class="form-input" type="password" id="cad-senha" placeholder="Mínimo 6 caracteres" /></div>
+
+      <button class="btn btn-primary" id="cad-submit-btn" style="width:100%;justify-content:center;margin-top:.5rem;padding:14px" onclick="enviarSolicitacaoCadastro()">Enviar solicitação</button>
+    </div>
+
+    <div id="cadastro-sucesso" style="display:none;text-align:center;padding:1rem 0">
+      <div style="font-size:3rem;margin-bottom:1rem">📨</div>
+      <div class="modal-title">Solicitação enviada!</div>
+      <p style="color:var(--gray-dark);font-size:14px;line-height:1.6;margin-top:.5rem">Nossa equipe vai analisar seus dados. Você poderá entrar assim que for aprovado.</p>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1.5rem" onclick="closeSolicitarCadastro()">Entendi</button>
     </div>
   </div>
 </div>
@@ -447,6 +527,12 @@
     const bairroSel = document.getElementById('f-bairro');
     bairroSel.innerHTML = '<option value="">Selecione o bairro...</option>' +
       bairrosCache.map(b => `<option value="${b.id}" data-nome="${b.nome}">${b.nome}</option>`).join('');
+
+    const cadBairroSel = document.getElementById('cad-bairro');
+    if (cadBairroSel) {
+      cadBairroSel.innerHTML = '<option value="">Selecione...</option>' +
+        bairrosCache.map(b => `<option value="${b.id}">${b.nome}</option>`).join('');
+    }
 
     /* grid visual de bairros */
     const grid = document.getElementById('bairros-grid');
@@ -482,7 +568,7 @@
     }
   }
 
-  /* ── LOGIN VETERINÁRIO ── */
+  /* ── LOGIN VETERINÁRIO/CLIENTE ── */
   function openLogin() { document.getElementById('login-modal').classList.add('open'); document.getElementById('login-error').classList.remove('show'); }
   function closeLogin() { document.getElementById('login-modal').classList.remove('open'); }
   async function doLogin() {
@@ -492,13 +578,145 @@
     try {
       const { error } = await sb.auth.signInWithPassword({ email, password: senha });
       if (error) throw error;
-      showToast('✅ Login realizado! Redirecionando...');
-      setTimeout(() => { window.location.href = '/vet'; }, 800);
+      closeLogin();
+      showToast('✅ Login realizado!');
+      await checkAndRenderGate();
+      document.getElementById('prescricao').scrollIntoView({ behavior: 'smooth' });
     } catch(err) {
       document.getElementById('login-error').classList.add('show');
     }
   }
   document.getElementById('login-modal').addEventListener('click', function(e){ if(e.target===this) closeLogin(); });
+
+  /* ── SOLICITAR CADASTRO ── */
+  let tipoCadastroAtual = null;
+  function openSolicitarCadastro() {
+    document.getElementById('modal-cadastro').classList.add('open');
+    document.getElementById('cadastro-form-wrap').style.display = 'block';
+    document.getElementById('cadastro-sucesso').style.display = 'none';
+    document.getElementById('cadastro-error').classList.remove('show');
+    setTipoCadastro('veterinario');
+  }
+  function closeSolicitarCadastro() { document.getElementById('modal-cadastro').classList.remove('open'); }
+  document.getElementById('modal-cadastro').addEventListener('click', function(e){ if(e.target===this) closeSolicitarCadastro(); });
+
+  function setTipoCadastro(tipo) {
+    tipoCadastroAtual = tipo;
+    document.getElementById('tipo-btn-vet').classList.toggle('active', tipo === 'veterinario');
+    document.getElementById('tipo-btn-petshop').classList.toggle('active', tipo === 'petshop');
+    document.getElementById('campo-crmv').style.display = tipo === 'veterinario' ? 'block' : 'none';
+    document.getElementById('campo-cpf').style.display  = tipo === 'veterinario' ? 'block' : 'none';
+    document.getElementById('campo-cnpj').style.display = tipo === 'petshop' ? 'block' : 'none';
+    document.getElementById('cad-nome-label').textContent = tipo === 'petshop' ? 'Nome do Petshop/Clínica' : 'Nome completo';
+  }
+
+  function mostrarErroCadastro(msg) {
+    const el = document.getElementById('cadastro-error');
+    el.textContent = msg; el.classList.add('show');
+  }
+
+  async function enviarSolicitacaoCadastro() {
+    const nome = document.getElementById('cad-nome').value.trim();
+    const tel = document.getElementById('cad-tel').value.trim();
+    const bairroId = document.getElementById('cad-bairro').value;
+    const email = document.getElementById('cad-email').value.trim();
+    const senha = document.getElementById('cad-senha').value;
+    const crmv = document.getElementById('cad-crmv').value.trim();
+    const cpf = document.getElementById('cad-cpf').value.trim();
+    const cnpj = document.getElementById('cad-cnpj').value.trim();
+
+    document.getElementById('cadastro-error').classList.remove('show');
+
+    if (!nome) return mostrarErroCadastro('Digite o nome.');
+    if (!telefoneValido(tel)) return mostrarErroCadastro('Telefone inválido. Use o formato (98) 9 0000-0000.');
+    if (!bairroId) return mostrarErroCadastro('Selecione o bairro.');
+    if (!email || !email.includes('@')) return mostrarErroCadastro('Digite um e-mail válido.');
+    if (!senha || senha.length < 6) return mostrarErroCadastro('A senha precisa ter no mínimo 6 caracteres.');
+
+    if (tipoCadastroAtual === 'veterinario') {
+      if (!crmvValido(crmv)) return mostrarErroCadastro('CRMV inválido — deve conter apenas números (3 a 6 dígitos).');
+      if (!cpfValido(cpf)) return mostrarErroCadastro('CPF inválido. Verifique os números digitados.');
+    } else {
+      if (!cnpjValido(cnpj)) return mostrarErroCadastro('CNPJ inválido. Verifique os números digitados.');
+    }
+
+    const btn = document.getElementById('cad-submit-btn');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+
+    try {
+      /* Cria a conta de autenticação (usada depois para o login) */
+      const { data: signUpData, error: signUpErr } = await sb.auth.signUp({ email, password: senha });
+      if (signUpErr) throw signUpErr;
+
+      const authUserId = signUpData?.user?.id || null;
+
+      /* Registra a solicitação para o admin analisar */
+      const { error: insErr } = await sb.from('solicitacoes_cadastro').insert({
+        tipo: tipoCadastroAtual,
+        nome, email, telefone: tel,
+        bairro_id: bairroId,
+        crmv: tipoCadastroAtual === 'veterinario' ? crmv : null,
+        cpf: tipoCadastroAtual === 'veterinario' ? cpf : null,
+        cnpj: tipoCadastroAtual === 'petshop' ? cnpj : null,
+        auth_user_id: authUserId,
+        status: 'pendente'
+      });
+      if (insErr) throw insErr;
+
+      document.getElementById('cadastro-form-wrap').style.display = 'none';
+      document.getElementById('cadastro-sucesso').style.display = 'block';
+    } catch (err) {
+      console.error(err);
+      mostrarErroCadastro(err.message?.includes('already registered') ? 'Este e-mail já está cadastrado. Tente fazer login.' : ('Erro: ' + (err.message || 'tente novamente.')));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Enviar solicitação';
+    }
+  }
+
+  /* ── GATE DE ACESSO — controla o que aparece na seção de prescrição ── */
+  function mostrarEstadoGate(estado) {
+    ['gate-nao-logado','gate-pendente','gate-rejeitado','gate-aprovado'].forEach(id => {
+      document.getElementById(id).style.display = (id === estado) ? 'block' : 'none';
+    });
+  }
+
+  async function checkAndRenderGate() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { mostrarEstadoGate('gate-nao-logado'); return; }
+
+    const user = session.user;
+
+    /* 1. Tenta achar solicitação vinculada a esta conta */
+    const { data: solic } = await sb.from('solicitacoes_cadastro')
+      .select('*').eq('auth_user_id', user.id)
+      .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+
+    let status = solic?.status;
+
+    /* 2. Fallback — conta criada manualmente pelo admin antes desta feature existir */
+    if (!status) {
+      const { data: vet } = await sb.from('veterinarios').select('id').eq('email', user.email).maybeSingle();
+      const { data: local } = vet ? { data: null } : await sb.from('locais').select('id').eq('email', user.email).maybeSingle();
+      if (vet || local) status = 'aprovado';
+    }
+
+    if (status === 'aprovado') {
+      mostrarEstadoGate('gate-aprovado');
+      document.getElementById('gate-user-badge').textContent = `— logado como ${user.email}`;
+    } else if (status === 'rejeitado') {
+      document.getElementById('gate-motivo-rejeicao').textContent = solic?.motivo_rejeicao
+        ? `Motivo: ${solic.motivo_rejeicao}` : 'Seu cadastro não foi aprovado. Entre em contato para mais informações.';
+      mostrarEstadoGate('gate-rejeitado');
+    } else {
+      mostrarEstadoGate('gate-pendente');
+    }
+  }
+
+  async function vetLogoutGate() {
+    await sb.auth.signOut();
+    mostrarEstadoGate('gate-nao-logado');
+    showToast('Você saiu da sua conta.');
+  }
 
   /* ── MEDICAMENTOS (linhas dinâmicas) ── */
   function addMed() {
@@ -556,6 +774,56 @@
   function telefoneValido(valor) {
     const digitos = (valor || '').replace(/\D/g, '');
     return digitos.length === 10 || digitos.length === 11;
+  }
+
+  /* ── CPF: máscara + validação por dígito verificador (algoritmo padrão) ── */
+  function mascaraCPF(input) {
+    let v = input.value.replace(/\D/g, '').slice(0, 11);
+    v = v.replace(/(\d{3})(\d)/, '$1.$2');
+    v = v.replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3');
+    v = v.replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2');
+    input.value = v;
+  }
+  function cpfValido(valor) {
+    const cpf = (valor || '').replace(/\D/g, '');
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += parseInt(cpf[i]) * (10 - i);
+    let resto = (soma * 10) % 11; if (resto === 10) resto = 0;
+    if (resto !== parseInt(cpf[9])) return false;
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += parseInt(cpf[i]) * (11 - i);
+    resto = (soma * 10) % 11; if (resto === 10) resto = 0;
+    return resto === parseInt(cpf[10]);
+  }
+
+  /* ── CNPJ: máscara + validação por dígito verificador ── */
+  function mascaraCNPJ(input) {
+    let v = input.value.replace(/\D/g, '').slice(0, 14);
+    v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+    v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+    v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+    v = v.replace(/(\d{4})(\d)/, '$1-$2');
+    input.value = v;
+  }
+  function cnpjValido(valor) {
+    const cnpj = (valor || '').replace(/\D/g, '');
+    if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+    const calc = (base) => {
+      let pesos = base.length === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2];
+      let soma = 0;
+      for (let i = 0; i < base.length; i++) soma += parseInt(base[i]) * pesos[i];
+      const resto = soma % 11;
+      return resto < 2 ? 0 : 11 - resto;
+    };
+    const dv1 = calc(cnpj.slice(0, 12));
+    if (dv1 !== parseInt(cnpj[12])) return false;
+    const dv2 = calc(cnpj.slice(0, 13));
+    return dv2 === parseInt(cnpj[13]);
+  }
+  function crmvValido(valor) {
+    const digitos = (valor || '').replace(/\D/g, '');
+    return digitos.length >= 3 && digitos.length <= 6;
   }
 
   function fileToBase64(file) {
@@ -739,7 +1007,7 @@
 
   setTimeout(() => { document.getElementById('wpp-btn').style.opacity = '1'; }, 3000);
 
-  loadOptions();
+  loadOptions().then(() => checkAndRenderGate());
 </script>
 </body>
 </html>

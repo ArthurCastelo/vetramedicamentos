@@ -844,6 +844,20 @@ async function salvarMed() {
   const id = document.getElementById('med-id').value;
   const nome = document.getElementById('med-nome').value.trim();
   if (!nome) { showToast('Digite o nome do medicamento.'); return; }
+
+  /* Blindagem contra duplicata: mesmo nome (ignorando acentos/maiúsculas/espaços) já cadastrado */
+  const existente = encontrarMedicamentoExistente(nome);
+  if (existente && existente.id !== id) {
+    if (!id && medModalContext && medModalContext.prescMedId) {
+      /* Veio do fluxo de vincular prescrição: usa o medicamento já existente em vez de duplicar */
+      await vincularMedicamentoExistente(medModalContext.prescMedId, existente.id, medModalContext.prescricaoId);
+      closeMedModal();
+      return;
+    }
+    showToast(`❌ Já existe um medicamento chamado "${existente.nome}". Edite-o em vez de criar um novo.`);
+    return;
+  }
+
   const payload = { nome, apresentacao: document.getElementById('med-apres').value.trim(), categoria: document.getElementById('med-cat').value.trim(), ativo: document.getElementById('med-ativo').checked };
   let error, novoId = id;
   if (id) {
@@ -921,6 +935,24 @@ async function loadPrescricoes() {
 function medNome(pm) {
   if (pm.medicamentos?.nome) return pm.medicamentos.nome + (pm.medicamentos.apresentacao ? ' — '+pm.medicamentos.apresentacao : '');
   return pm.nome_livre || 'Medicamento não informado';
+}
+
+/* Normaliza pra comparação (case/acentos/espaços não devem contar como medicamento "diferente") */
+function normalizarNomeMed(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+}
+function encontrarMedicamentoExistente(nome) {
+  const alvo = normalizarNomeMed(nome);
+  if (!alvo) return null;
+  return allMedicamentos.find(m => normalizarNomeMed(m.nome) === alvo) || null;
+}
+async function vincularMedicamentoExistente(prescMedId, medicamentoId, prescricaoId) {
+  const { error } = await sb.from('prescricao_medicamentos').update({ medicamento_id: medicamentoId, nome_livre: null }).eq('id', prescMedId);
+  if (error) { showToast('Erro: ' + error.message); return; }
+  await loadMedicamentos();
+  await loadPrescricoes();
+  showToast('✅ Medicamento vinculado ao catálogo (já existia)!');
+  if (prescricaoId) verDetalhes(prescricaoId);
 }
 
 function renderPresc() {
@@ -1251,14 +1283,18 @@ function verDetalhes(id) {
                   'border:1.5px solid var(--border-col)';
 
     if (semCatalogo) {
-      /* Sem match no catálogo: checkbox desabilitado + botão para cadastrar primeiro */
+      /* Sem match no catálogo: checkbox desabilitado + botão pra cadastrar (ou vincular, se já existir com esse nome) */
+      const existente = encontrarMedicamentoExistente(nome);
+      const acaoBtn = existente
+        ? `<button class="btn btn-outline btn-sm" style="margin-top:6px;padding:4px 10px;font-size:11px" onclick='vincularMedicamentoExistente("${m.id}", "${existente.id}", "${p.id}")'>🔗 Já existe no catálogo — vincular</button>`
+        : `<button class="btn btn-outline btn-sm" style="margin-top:6px;padding:4px 10px;font-size:11px" onclick='openMedModal(null, ${JSON.stringify(nome)}, {prescMedId:"${m.id}", prescricaoId:"${p.id}"})'>+ Cadastrar no catálogo</button>`;
       return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;${borda};opacity:.9">
         <input type="checkbox" disabled title="Cadastre este medicamento no catálogo antes de confirmar"
           style="margin-top:3px;width:16px;height:16px;flex-shrink:0;cursor:not-allowed" />
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600">${nome}</div>
           ${dosagem}${badge}
-          <button class="btn btn-outline btn-sm" style="margin-top:6px;padding:4px 10px;font-size:11px" onclick='openMedModal(null, ${JSON.stringify(nome)}, {prescMedId:"${m.id}", prescricaoId:"${p.id}"})'>+ Cadastrar no catálogo</button>
+          ${acaoBtn}
         </div>
       </div>`;
     }

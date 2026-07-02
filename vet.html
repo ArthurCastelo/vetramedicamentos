@@ -6,6 +6,12 @@
   <title>Minhas Prescrições — VETRA Distribuidora</title>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <style>
     :root {
       --green:#0E3B3E; --green-mid:#1B5E5E; --green-light:#4FA89C;
@@ -30,8 +36,29 @@
     .login-sub { font-size:13px; color:var(--gray-mid); text-align:center; margin-bottom:1.75rem; }
     .form-group { margin-bottom:1rem; }
     .form-label { font-size:13px; font-weight:600; color:var(--gray-dark); margin-bottom:6px; display:block; }
-    .form-input { width:100%; padding:11px 16px; border:1.5px solid var(--gray-light); border-radius:var(--radius-sm); font-family:'DM Sans',sans-serif; font-size:14px; background:var(--white); color:var(--charcoal); outline:none; transition:border .2s; }
-    .form-input:focus { border-color:var(--green); }
+    .form-input, .form-select { width:100%; padding:11px 16px; border:1.5px solid var(--gray-light); border-radius:var(--radius-sm); font-family:'DM Sans',sans-serif; font-size:14px; background:var(--white); color:var(--charcoal); outline:none; transition:border .2s; }
+    .form-input:focus, .form-select:focus { border-color:var(--green); }
+    .form-title { font-family:'Sora',sans-serif; font-size:1.2rem; font-weight:700; margin-bottom:1.5rem; }
+    .med-input-row { display:grid; grid-template-columns:1.4fr 1fr auto; gap:10px; margin-bottom:10px; align-items:end; }
+    .remove-med { background:none; border:1.5px solid var(--gray-light); border-radius:var(--radius-sm); width:38px; height:38px; cursor:pointer; font-size:18px; color:var(--gray-mid); transition:all .2s; display:flex; align-items:center; justify-content:center; }
+    .remove-med:hover { border-color:#e53e3e; color:#e53e3e; background:#fff5f5; }
+    .add-med-btn { display:flex; align-items:center; gap:8px; background:none; cursor:pointer; border:1.5px dashed var(--gray-light); border-radius:var(--radius-sm); padding:10px 16px; font-family:'DM Sans',sans-serif; font-size:14px; color:var(--green); width:100%; margin-bottom:1.25rem; transition:all .2s; }
+    .add-med-btn:hover { background:var(--green-pale); border-color:var(--green); }
+    .divider-or { display:flex; align-items:center; gap:12px; margin:1.25rem 0; color:var(--gray-mid); font-size:13px; }
+    .divider-or::before, .divider-or::after { content:''; flex:1; height:1px; background:var(--gray-light); }
+    .upload-zone { border:2px dashed var(--gray-light); border-radius:var(--radius-sm); padding:2rem; text-align:center; cursor:pointer; transition:all .2s; background:var(--white); position:relative; }
+    .upload-zone:hover, .upload-zone.dragging { border-color:var(--green); background:var(--green-pale); }
+    .upload-zone input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+    .upload-icon { font-size:2.5rem; margin-bottom:.75rem; }
+    .upload-text { font-size:14px; color:var(--gray-mid); }
+    .upload-text strong { color:var(--green); }
+    .upload-preview { display:none; margin-top:1rem; }
+    .upload-preview img { max-width:100%; border-radius:8px; max-height:160px; object-fit:contain; }
+    .success-msg { display:none; background:var(--green-pale); border:1.5px solid var(--green-light); border-radius:var(--radius-sm); padding:14px 18px; font-size:14px; color:var(--green); font-weight:500; text-align:center; margin-top:1rem; }
+    .success-msg.show { display:block; }
+    .toast { position:fixed; bottom:28px; right:28px; background:var(--green); color:var(--white); padding:14px 22px; border-radius:14px; font-size:14px; font-weight:500; box-shadow:0 8px 24px rgba(27,94,59,0.3); z-index:500; transform:translateY(80px); opacity:0; transition:all .4s cubic-bezier(.34,1.56,.64,1); }
+    .toast.show { transform:translateY(0); opacity:1; }
+    .nova-presc-card { background:var(--white); border-radius:var(--radius); box-shadow:var(--shadow); padding:1.5rem; margin-bottom:1.5rem; }
     .btn { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:500; cursor:pointer; border:none; transition:all .2s; }
     .btn-primary { background:var(--green); color:var(--white); }
     .btn-primary:hover { background:var(--green-mid); }
@@ -165,6 +192,65 @@
       </div>
     </div>
 
+    <div style="display:flex;justify-content:flex-end;margin-bottom:1.5rem">
+      <button class="btn btn-primary" id="toggle-nova-presc-btn" onclick="toggleNovaPrescricao()">+ Nova Prescrição</button>
+    </div>
+
+    <div class="nova-presc-card" id="nova-presc-card" style="display:none">
+      <div class="form-title">📋 Nova Prescrição <span style="font-size:12px;font-weight:500;color:var(--gray-mid)" id="nova-presc-vet-badge"></span></div>
+      <form id="presc-form" onsubmit="submitPrescricao(event)">
+        <div class="form-group">
+          <label class="form-label">Petshop / Clínica *</label>
+          <select class="form-select" id="f-local-select" onchange="onLocalSelectChange(this)" style="display:none"></select>
+          <input class="form-input" type="text" id="f-local" placeholder="Nome do estabelecimento" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Telefone para contato *</label>
+          <input class="form-input" type="tel" id="f-tel" placeholder="(98) 9 0000-0000" inputmode="numeric" maxlength="16" oninput="mascaraTelefone(this)" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bairro *</label>
+          <select class="form-select" id="f-bairro" required>
+            <option value="">Carregando bairros...</option>
+          </select>
+        </div>
+
+        <div class="form-label" style="margin-bottom:10px">Medicamentos prescritos *</div>
+        <div id="meds-list">
+          <div class="med-input-row">
+            <div>
+              <select class="form-select" name="med-select">
+                <option value="">Carregando medicamentos...</option>
+              </select>
+            </div>
+            <div><input class="form-input" type="text" placeholder="Dosagem / qtd." name="med-dose" /></div>
+            <button type="button" class="remove-med" onclick="removeMed(this)" title="Remover">×</button>
+          </div>
+        </div>
+        <button type="button" class="add-med-btn" onclick="addMed()"><span style="font-size:18px;font-weight:700">+</span> Adicionar medicamento</button>
+
+        <div class="divider-or">ou envie a foto da prescrição</div>
+
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="presc-foto" accept="image/*,.pdf" onchange="handleUpload(this)" />
+          <div class="upload-icon">📷</div>
+          <div class="upload-text"><strong>Clique para enviar</strong> ou arraste aqui<br/><span style="font-size:12px">JPG, PNG ou PDF — até 10 MB</span></div>
+          <div class="upload-preview" id="upload-preview">
+            <img id="preview-img" src="" alt="preview" />
+            <div id="preview-name" style="font-size:13px;color:var(--green);margin-top:8px"></div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top:1.25rem">
+          <label class="form-label">Observações</label>
+          <textarea class="form-input" id="f-obs" rows="3" placeholder="Informações adicionais, urgência, etc." style="resize:vertical"></textarea>
+        </div>
+
+        <button type="submit" id="submit-btn" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.5rem;padding:14px">Enviar Prescrição</button>
+      </form>
+      <div class="success-msg" id="success-msg">✅ Prescrição enviada! Nossa equipe retornará em breve.</div>
+    </div>
+
     <div id="sem-vinculo-aviso" style="display:none" class="no-match-card">
       <div style="font-size:2rem;margin-bottom:.5rem">🔍</div>
       <strong>Não encontramos prescrições vinculadas ao seu CRMV ainda.</strong>
@@ -188,6 +274,8 @@
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 const SB_URL = 'https://xiwkosnranwsudjkdlli.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhpd2tvc25yYW53c3VkamtkbGxpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5Nzc0NTQsImV4cCI6MjA5NjU1MzQ1NH0.72dWtHQZfaluwvvecsL_D6jFBY-Ah_x7KPTObaNRMec';
@@ -196,6 +284,9 @@ const sb = supabase.createClient(SB_URL, SB_KEY);
 let minhasPrescricoesAll = [];
 let filtroAtual = '';
 let vetAtual = null;
+let bairrosCache = [];
+let medicamentosCache = [];
+let locaisVetCache = [];
 
 /* ════════════ LOGIN ════════════ */
 async function vetLogin() {
@@ -251,6 +342,351 @@ async function initVet(user) {
   document.getElementById('welcome-title').textContent = `Olá, ${(vetData?.nome || user.email).split(' ')[0]}! 👋`;
 
   await carregarMinhasPrescricoes(user.email, vetData);
+  await carregarOpcoesNovaPrescricao();
+}
+
+/* ════════════ NOVA PRESCRIÇÃO (formulário) ════════════ */
+async function carregarOpcoesNovaPrescricao() {
+  if (!vetAtual) return;
+
+  const badge = document.getElementById('nova-presc-vet-badge');
+  badge.textContent = `— ${vetAtual.nome}${vetAtual.crmv ? ' (CRMV ' + vetAtual.crmv + ')' : ''}`;
+  if (vetAtual.telefone) document.getElementById('f-tel').value = vetAtual.telefone;
+
+  const { data: bairros } = await sb.from('bairros').select('*').order('nome');
+  bairrosCache = bairros || [];
+  const bairroSel = document.getElementById('f-bairro');
+  bairroSel.innerHTML = '<option value="">Selecione o bairro...</option>' +
+    bairrosCache.map(b => `<option value="${b.id}" data-nome="${b.nome}" ${b.id === vetAtual.bairro_id ? 'selected' : ''}>${b.nome}</option>`).join('');
+
+  const { data: meds } = await sb.from('medicamentos').select('*').eq('ativo', true).order('nome');
+  medicamentosCache = meds || [];
+  document.querySelectorAll('[name="med-select"]').forEach(sel => populateMedSelect(sel));
+
+  /* Petshops vinculados a este veterinário (relevante pra vet "volante" com vários locais) */
+  const { data: vinculos } = await sb.from('veterinario_locais').select('local_id, locais(id, nome)').eq('veterinario_id', vetAtual.id);
+  locaisVetCache = (vinculos || []).map(v => v.locais).filter(Boolean);
+  const localSelect = document.getElementById('f-local-select');
+  const localInput = document.getElementById('f-local');
+  if (locaisVetCache.length) {
+    localSelect.innerHTML = '<option value="">Selecione o petshop/clínica...</option>' +
+      locaisVetCache.map(l => `<option value="${l.id}" data-nome="${l.nome}">${l.nome}</option>`).join('') +
+      '<option value="outro">Outro (digitar manualmente)</option>';
+    localSelect.style.display = 'block';
+    localInput.style.display = 'none';
+    localInput.required = false;
+    localSelect.required = true;
+    localSelect.onchange = () => onLocalSelectChange(localSelect);
+  }
+}
+
+function onLocalSelectChange(sel) {
+  const localInput = document.getElementById('f-local');
+  if (sel.value === 'outro') {
+    localInput.style.display = 'block';
+    localInput.required = true;
+    localInput.value = '';
+  } else {
+    localInput.style.display = 'none';
+    localInput.required = false;
+  }
+}
+
+function toggleNovaPrescricao() {
+  const card = document.getElementById('nova-presc-card');
+  const aberto = card.style.display !== 'none';
+  card.style.display = aberto ? 'none' : 'block';
+  document.getElementById('toggle-nova-presc-btn').textContent = aberto ? '+ Nova Prescrição' : '✕ Fechar formulário';
+}
+
+/* ── MEDICAMENTOS (linhas dinâmicas) ── */
+function populateMedSelect(sel) {
+  sel.innerHTML = '<option value="">Selecione o medicamento...</option>' +
+    medicamentosCache.map(m => `<option value="${m.id}" data-nome="${m.nome}">${m.nome}${m.apresentacao ? ' — '+m.apresentacao : ''}</option>`).join('') +
+    '<option value="outro">Outro (digitar manualmente)</option>';
+  sel.onchange = function() { handleMedSelectChange(this); };
+}
+function handleMedSelectChange(sel) {
+  const row = sel.closest('.med-input-row');
+  let manualInput = row.querySelector('[name="med-manual"]');
+  if (sel.value === 'outro') {
+    if (!manualInput) {
+      manualInput = document.createElement('input');
+      manualInput.className = 'form-input';
+      manualInput.name = 'med-manual';
+      manualInput.placeholder = 'Nome do medicamento';
+      manualInput.style.marginTop = '8px';
+      sel.parentElement.appendChild(manualInput);
+    }
+  } else if (manualInput) {
+    manualInput.remove();
+  }
+}
+function addMed() {
+  const list = document.getElementById('meds-list');
+  const row = document.createElement('div');
+  row.className = 'med-input-row';
+  row.innerHTML = `<div><select class="form-select" name="med-select"></select></div><div><input class="form-input" type="text" placeholder="Dosagem / qtd." name="med-dose"/></div><button type="button" class="remove-med" onclick="removeMed(this)" title="Remover">×</button>`;
+  list.appendChild(row);
+  populateMedSelect(row.querySelector('[name="med-select"]'));
+}
+function removeMed(btn) {
+  const row = btn.closest('.med-input-row');
+  const list = document.getElementById('meds-list');
+  if (list.children.length > 1) row.remove();
+}
+
+/* ── COMPRESSÃO DE IMAGEM (economiza storage e egress do Supabase) ── */
+function compressImage(file, maxWidth = 1280, quality = 0.7) {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/') || file.type === 'image/gif') { resolve(file); return; }
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e => {
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) { height = Math.round(height * (maxWidth / width)); width = maxWidth; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if (!blob || blob.size >= file.size) { resolve(file); return; }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => { file._naoComprimido = true; resolve(file); };
+      img.src = e.target.result;
+    };
+    reader.onerror = () => { file._naoComprimido = true; resolve(file); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ── Máscara e validação de telefone (BR): bloqueia letras, formata em tempo real ── */
+function mascaraTelefone(input) {
+  let v = input.value.replace(/\D/g, '').slice(0, 11);
+  if (v.length > 10) v = v.replace(/(\d{2})(\d{1})(\d{4})(\d{4})/, '($1) $2 $3-$4');
+  else if (v.length > 6) v = v.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
+  else if (v.length > 2) v = v.replace(/(\d{2})(\d{0,5})/, '($1) $2');
+  else if (v.length > 0) v = v.replace(/(\d{0,2})/, '($1');
+  input.value = v;
+}
+function telefoneValido(valor) {
+  const digitos = (valor || '').replace(/\D/g, '');
+  return digitos.length === 10 || digitos.length === 11;
+}
+
+/* ── UPLOAD ── */
+function handleUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('preview-name').textContent = file.name;
+  if (file.type.startsWith('image/')) {
+    const r = new FileReader();
+    r.onload = e => { document.getElementById('preview-img').src = e.target.result; document.getElementById('preview-img').style.display = 'block'; };
+    r.readAsDataURL(file);
+  } else {
+    document.getElementById('preview-img').style.display = 'none';
+  }
+  document.getElementById('upload-preview').style.display = 'block';
+  document.querySelector('#upload-zone .upload-icon').style.display = 'none';
+  document.querySelector('#upload-zone .upload-text').style.display = 'none';
+}
+document.getElementById('upload-zone').addEventListener('dragover', e => { e.preventDefault(); document.getElementById('upload-zone').classList.add('dragging'); });
+document.getElementById('upload-zone').addEventListener('dragleave', () => document.getElementById('upload-zone').classList.remove('dragging'));
+document.getElementById('upload-zone').addEventListener('drop', e => {
+  e.preventDefault(); document.getElementById('upload-zone').classList.remove('dragging');
+  const f = e.dataTransfer.files[0];
+  if (f) { document.getElementById('presc-foto').files = e.dataTransfer.files; handleUpload(document.getElementById('presc-foto')); }
+});
+
+/* ── SUBMIT PRESCRIÇÃO ── */
+async function submitPrescricao(e) {
+  e.preventDefault();
+
+  const telInput = document.getElementById('f-tel');
+  if (!telefoneValido(telInput.value)) {
+    showToast('❌ Telefone inválido. Use o formato (98) 9 0000-0000 com DDD.');
+    telInput.focus();
+    return;
+  }
+
+  const btn = document.getElementById('submit-btn');
+  btn.innerHTML = '<span class="spinner" style="margin-right:6px"></span>Enviando...';
+  btn.disabled = true;
+
+  const bairroSel = document.getElementById('f-bairro');
+  const bairroId = bairroSel.value;
+  const bairroNome = bairroSel.selectedOptions[0]?.dataset.nome || '';
+  const tel = document.getElementById('f-tel').value;
+  const obs = document.getElementById('f-obs').value || '';
+
+  const localSelect = document.getElementById('f-local-select');
+  const usaSelectLocal = localSelect.style.display !== 'none' && localSelect.value && localSelect.value !== 'outro';
+  const localId = usaSelectLocal ? localSelect.value : null;
+  const localNome = usaSelectLocal ? (localSelect.selectedOptions[0]?.dataset.nome || '') : document.getElementById('f-local').value;
+
+  try {
+    const prescId = crypto.randomUUID();
+    const payload = {
+      id: prescId,
+      local_id: localId,
+      local_nome: localNome,
+      veterinario_id: vetAtual?.id || null,
+      veterinario_nome: vetAtual ? `${vetAtual.nome}${vetAtual.crmv ? ' - CRMV ' + vetAtual.crmv : ''}` : '',
+      bairro_id: bairroId || null,
+      bairro_nome: bairroNome,
+      observacoes: obs + (tel ? '\nTelefone: ' + tel : ''),
+      origem: 'publico',
+      status: 'pendente'
+    };
+    const { error: prescErr } = await sb.from('prescricoes').insert(payload);
+    if (prescErr) { console.error('Erro prescrição:', prescErr); throw new Error(prescErr.message); }
+
+    /* Medicamentos selecionados */
+    const rows = [...document.querySelectorAll('.med-input-row')];
+    const meds = [];
+    rows.forEach((row, i) => {
+      const sel = row.querySelector('[name="med-select"]');
+      const dose = row.querySelector('[name="med-dose"]')?.value || '';
+      const manual = row.querySelector('[name="med-manual"]')?.value || '';
+      if (!sel || !sel.value) return;
+      if (sel.value === 'outro') {
+        if (manual) meds.push({ prescricao_id: prescId, medicamento_id: null, nome_livre: manual, dosagem: dose, ordem: i });
+      } else {
+        meds.push({ prescricao_id: prescId, medicamento_id: sel.value, nome_livre: null, dosagem: dose, ordem: i });
+      }
+    });
+    if (meds.length > 0) {
+      const { error: medErr } = await sb.from('prescricao_medicamentos').insert(meds);
+      if (medErr) console.warn('Erro meds (não crítico):', medErr);
+    }
+
+    /* Upload foto (opcional) — comprime antes de enviar */
+    const fotoInput = document.getElementById('presc-foto');
+    let avisoFoto = '';
+    let fotoEnviada = false;
+    let compressedFileForAI = null;
+    if (fotoInput.files && fotoInput.files[0]) {
+      const originalFile = fotoInput.files[0];
+      const file = await compressImage(originalFile);
+      const TAMANHO_MAX = 10 * 1024 * 1024; // 10MB — mesmo limite configurado no bucket
+
+      if (file.size > TAMANHO_MAX) {
+        avisoFoto = file._naoComprimido
+          ? ' (a foto não foi enviada: o formato da imagem não pôde ser processado pelo navegador — tente tirar a foto novamente ou enviar como JPG/PNG)'
+          : ' (a foto não foi enviada: o arquivo é muito grande, mesmo após compressão — tente uma foto com menor resolução)';
+      } else {
+        const ext = file.type === 'image/jpeg' ? 'jpg' : file.name.split('.').pop().toLowerCase();
+        const path = `${prescId}/foto.${ext}`;
+        const { error: storErr } = await sb.storage.from('prescricoes').upload(path, file, { upsert: true, contentType: file.type });
+        if (storErr) {
+          console.error('Erro ao enviar foto:', storErr);
+          avisoFoto = ' (mas a foto não foi enviada: ' + storErr.message + ')';
+        } else {
+          fotoEnviada = true;
+          compressedFileForAI = file;
+          const { error: updErr } = await sb.from('prescricoes').update({ foto_url: path }).eq('id', prescId);
+          if (updErr) {
+            console.error('Erro ao salvar referência da foto:', updErr);
+            avisoFoto = ' (mas houve erro ao registrar a foto: ' + updErr.message + ')';
+          }
+        }
+      }
+    }
+
+    /* Análise automática por IA — roda sempre que há foto, mesmo com medicamentos
+       digitados manualmente, para o total final já vir combinado (manual + IA) */
+    let avisoIA = '';
+    if (fotoEnviada && compressedFileForAI) {
+      try {
+        let base64, mimeType;
+        if (compressedFileForAI.type === 'application/pdf' && typeof pdfjsLib !== 'undefined') {
+          const arrayBuffer = await compressedFileForAI.arrayBuffer();
+          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const page = await pdfDoc.getPage(1);
+          const viewport = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+          mimeType = 'image/jpeg';
+        } else {
+          base64 = await fileToBase64(compressedFileForAI);
+          mimeType = compressedFileForAI.type;
+        }
+        const resp = await fetch('/.netlify/functions/analisar-foto', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prescricaoId: prescId, imageBase64: base64, mimeType })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.medicamentosSalvos > 0) {
+          const totalCombinado = meds.length + result.medicamentosSalvos;
+          avisoIA = meds.length > 0
+            ? ` 🤖 Identificamos mais ${result.medicamentosSalvos} medicamento(s) na foto — total de ${totalCombinado} registrados.`
+            : ` 🤖 Identificamos ${result.medicamentosSalvos} medicamento(s) na foto automaticamente.`;
+        } else if (result.legivel === false && meds.length === 0) {
+          avisoIA = ' Não conseguimos ler os medicamentos na foto automaticamente — nossa equipe vai conferir manualmente.';
+        }
+      } catch (iaErr) {
+        console.warn('Análise por IA não disponível (não crítico):', iaErr);
+      }
+    }
+
+    document.getElementById('presc-form').style.display = 'none';
+    document.getElementById('success-msg').classList.add('show');
+    document.getElementById('success-msg').innerHTML = '✅ Prescrição enviada!' + avisoFoto + avisoIA;
+
+    /* Atualiza a lista de "Minhas prescrições" com o item recém-enviado */
+    await carregarMinhasPrescricoes((await sb.auth.getUser()).data.user.email, vetAtual);
+
+    /* Reseta o formulário depois de alguns segundos, pra permitir enviar outra sem recarregar a página */
+    setTimeout(resetPrescForm, 4000);
+
+  } catch(err) {
+    console.error('Erro geral:', err);
+    showToast('❌ Erro: ' + (err.message || 'Tente novamente ou use o WhatsApp.'));
+    btn.textContent = 'Enviar Prescrição'; btn.disabled = false;
+  }
+}
+
+function resetPrescForm() {
+  const form = document.getElementById('presc-form');
+  form.reset();
+  form.style.display = 'block';
+  document.getElementById('success-msg').classList.remove('show');
+  document.getElementById('submit-btn').textContent = 'Enviar Prescrição';
+  document.getElementById('submit-btn').disabled = false;
+
+  document.getElementById('upload-preview').style.display = 'none';
+  document.getElementById('preview-img').style.display = 'none';
+  document.querySelector('#upload-zone .upload-icon').style.display = 'block';
+  document.querySelector('#upload-zone .upload-text').style.display = 'block';
+
+  const medsList = document.getElementById('meds-list');
+  [...medsList.children].slice(1).forEach(row => row.remove());
+  document.querySelectorAll('[name="med-select"]').forEach(sel => populateMedSelect(sel));
+  const manualLeftover = medsList.querySelector('[name="med-manual"]');
+  if (manualLeftover) manualLeftover.remove();
+
+  onLocalSelectChange(document.getElementById('f-local-select'));
+  if (vetAtual?.telefone) document.getElementById('f-tel').value = vetAtual.telefone;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
 }
 
 let vetPollingInterval = null;
@@ -261,11 +697,13 @@ function startVetPolling(user) {
     const { data: local } = vet ? { data: null } : await sb.from('locais').select('*').eq('email', user.email).maybeSingle();
     if (vet || local) {
       clearInterval(vetPollingInterval); vetPollingInterval = null;
+      vetAtual = vet || null;
       document.getElementById('vet-gate-bloqueado').style.display = 'none';
       document.getElementById('vet-conteudo-normal').style.display = 'block';
       document.getElementById('user-nome').textContent = vet?.nome || local?.nome || user.email;
       document.getElementById('welcome-title').textContent = `Olá, ${(vet?.nome || local?.nome || user.email).split(' ')[0]}! 👋`;
       await carregarMinhasPrescricoes(user.email, vet || null);
+      if (vet) await carregarOpcoesNovaPrescricao();
     }
   }, 15000);
 }
@@ -278,11 +716,13 @@ document.addEventListener('visibilitychange', async () => {
       const { data: local } = vet ? { data: null } : await sb.from('locais').select('*').eq('email', session.user.email).maybeSingle();
       if ((vet || local) && document.getElementById('vet-gate-bloqueado').style.display !== 'none') {
         clearInterval(vetPollingInterval); vetPollingInterval = null;
+        vetAtual = vet || null;
         document.getElementById('vet-gate-bloqueado').style.display = 'none';
         document.getElementById('vet-conteudo-normal').style.display = 'block';
         document.getElementById('user-nome').textContent = vet?.nome || local?.nome || session.user.email;
         document.getElementById('welcome-title').textContent = `Olá, ${(vet?.nome || local?.nome || session.user.email).split(' ')[0]}! 👋`;
         await carregarMinhasPrescricoes(session.user.email, vet || null);
+        if (vet) await carregarOpcoesNovaPrescricao();
       }
     }
   }

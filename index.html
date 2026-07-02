@@ -198,7 +198,7 @@
     <li><a href="#contato">Contato</a></li>
   </ul>
   <div class="nav-actions">
-    <button class="btn btn-outline" onclick="openLogin()">🩺 Sou Veterinário</button>
+    <a class="btn btn-outline" href="/vet">🩺 Sou Veterinário</a>
     <a class="btn btn-staff" href="/gerencia" title="Acesso restrito da equipe VETRA">👔 Funcionários</a>
   </div>
 </nav>
@@ -433,7 +433,7 @@
           <li><a href="https://wa.me/5598330168861" target="_blank">WhatsApp: (98) 3301-6886</a></li>
           <li><a href="mailto:vetra@vetradistribuidora.com.br">vetra@vetradistribuidora.com.br</a></li>
           <li><a href="https://instagram.com/vetra.distribuidora" target="_blank">@vetra.distribuidora</a></li>
-          <li><a href="#" onclick="openLogin();return false">Área do veterinário</a></li>
+          <li><a href="/vet">Área do veterinário</a></li>
         </ul>
       </div>
     </div>
@@ -586,6 +586,7 @@
       if (error) throw error;
       closeLogin();
       showToast('✅ Login realizado!');
+      /* checkAndRenderGate() redireciona pra /vet se for veterinário; petshop continua aqui */
       await checkAndRenderGate();
       document.getElementById('prescricao').scrollIntoView({ behavior: 'smooth' });
     } catch(err) {
@@ -690,24 +691,30 @@
 
     const user = session.user;
 
-    /* 1. Verifica se já existe registro aprovado em veterinarios ou locais */
+    /* Veterinário (aprovado, pendente ou rejeitado) tem área própria em /vet — redireciona
+       pra lá em vez de renderizar o gate aqui. Petshop (local) não tem portal próprio,
+       então continua usando o gate do index.html normalmente. */
     const { data: vet } = await sb.from('veterinarios').select('id, nome').eq('email', user.email).maybeSingle();
-    const { data: local } = vet ? { data: null } : await sb.from('locais').select('id, nome').eq('email', user.email).maybeSingle();
+    if (vet) { stopGatePolling(); window.location.href = '/vet'; return; }
 
-    if (vet || local) {
+    /* 1. Verifica se já existe registro aprovado em locais */
+    const { data: local } = await sb.from('locais').select('id, nome').eq('email', user.email).maybeSingle();
+
+    if (local) {
       stopGatePolling();
       mostrarEstadoGate('gate-aprovado');
-      const nomeExibicao = (vet?.nome || local?.nome || user.email);
-      document.getElementById('gate-user-badge').textContent = `— olá, ${nomeExibicao.split(' ')[0]}`;
+      document.getElementById('gate-user-badge').textContent = `— olá, ${local.nome.split(' ')[0]}`;
       return;
     }
 
     /* 2. Não aprovado — verifica solicitação pelo e-mail */
     const { data: solic } = await sb.from('solicitacoes_cadastro')
-      .select('status, motivo_rejeicao')
+      .select('status, motivo_rejeicao, tipo')
       .eq('email', user.email)
       .order('criado_em', { ascending: false })
       .limit(1).maybeSingle();
+
+    if (solic?.tipo === 'veterinario') { stopGatePolling(); window.location.href = '/vet'; return; }
 
     if (solic?.status === 'rejeitado') {
       stopGatePolling();
